@@ -225,11 +225,6 @@ static float g_soundPuddleAlpha = 1.0f;
 static bool g_soundBlipEnemy = true;
 static bool g_soundBlipTeam = false;
 static float g_soundBlipCol[4]{1.f, 0.f, 0.f, 1.f};  // red default
-static bool g_backtrackEnabled = false;
-static bool g_backtrackVisual = false;
-static int g_backtrackMs = 200;
-struct BacktrackRecord{Vec3 head;Vec3 pelvis;Vec3 chest;DWORD time;};
-static std::deque<BacktrackRecord> g_backtrack[ESP_MAX_PLAYERS+1];
 static float g_accentColor[4]{0.1f,0.55f,1.0f,1.0f};
 static float g_menuOpacity = 0.96f;
 static float g_uiScale = 1.00f;  // Default UI scale
@@ -947,9 +942,6 @@ static bool LoadConfigKeyMisc(const std::string& key, const std::string& val, bo
     if(key=="sound_blip_enemy"){ g_soundBlipEnemy=ParseBool(val); return true; }
     if(key=="sound_blip_team"){ g_soundBlipTeam=ParseBool(val); return true; }
     if(key=="sound_blip_col"){ if(!ParseColor4(val,g_soundBlipCol)) ok=false; return true; }
-    if(key=="backtrack"){ g_backtrackEnabled=ParseBool(val); return true; }
-    if(key=="backtrack_visual"){ g_backtrackVisual=ParseBool(val); return true; }
-    if(key=="backtrack_ms"){ int v; if(ParseInt(val,v)) g_backtrackMs=v; else ok=false; return true; }
     if(key=="accent"){ if(!ParseColor4(val,g_accentColor)) ok=false; return true; }
     if(key=="menu_opacity"){ float v; if(ParseFloat(val,v)) g_menuOpacity=v; else ok=false; return true; }
     if(key=="ui_scale"){ float v; if(ParseFloat(val,v)) g_uiScale=v; else ok=false; return true; }
@@ -1073,9 +1065,6 @@ static void ApplyDefaults(){
     g_soundBlipEnemy = true;
     g_soundBlipTeam = false;
     g_soundBlipCol[0]=1.f; g_soundBlipCol[1]=0.f; g_soundBlipCol[2]=0.f; g_soundBlipCol[3]=1.f;
-    g_backtrackEnabled = false;
-    g_backtrackVisual = false;
-    g_backtrackMs = 200;
     g_accentColor[0]=0.1f; g_accentColor[1]=0.55f; g_accentColor[2]=1.0f; g_accentColor[3]=1.0f;
     g_menuOpacity = 1.0f;
     g_uiScale = 1.10f;
@@ -1203,9 +1192,6 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "sound_blip_enemy", g_soundBlipEnemy);
     WriteBool(out, "sound_blip_team", g_soundBlipTeam);
     WriteColor4(out, "sound_blip_col", g_soundBlipCol);
-    WriteBool(out, "backtrack", g_backtrackEnabled);
-    WriteBool(out, "backtrack_visual", g_backtrackVisual);
-    WriteInt(out, "backtrack_ms", g_backtrackMs);
     WriteColor(out, "accent", g_accentColor);
     WriteFloat(out, "menu_opacity", g_menuOpacity);
     WriteFloat(out, "ui_scale", g_uiScale);
@@ -1360,14 +1346,6 @@ static void BuildESPData(){
         e.box_l=cx-boxW*0.5f;e.box_r=cx+boxW*0.5f;e.box_t=top;e.box_b=bot;
         e.health=health;e.team=team;e.distance=dist;e.yaw=0.f;
         RdName(namePtr,e.name,sizeof(e.name));
-        if((g_backtrackEnabled||g_backtrackVisual)&&e.ent_index>0&&e.ent_index<=ESP_MAX_PLAYERS){
-            auto& dq = g_backtrack[e.ent_index];
-            Vec3 pelvis{}; GetBonePos(pawn,BONE_PELVIS,pelvis);
-            dq.push_front(BacktrackRecord{head, pelvis, Vec3{}, nowTick});
-            DWORD maxAge = (DWORD)g_backtrackMs;
-            while(!dq.empty() && (DWORD)(nowTick - dq.back().time) > maxAge) dq.pop_back();
-            if(dq.size()>32) dq.pop_back();
-        }
     }
 }
 
@@ -1864,8 +1842,6 @@ static void RunAimbot(){
     Vec3 eyePos=localOrigin+Rd<Vec3>(lp+offsets::base_pawn::m_vecViewOffset);
     float curPitch=Rd<float>(vaAddr);float curYaw=Rd<float>(vaAddr+4);
     float bestDist=g_aimbotFov;Vec3 bestPoint{};bool found=false;
-    DWORD nowTick = GetTickCount();
-    DWORD maxAge = (DWORD)g_backtrackMs;
     auto evalPoint = [&](const Vec3& p){
         Vec2 aimAngle=CalcAngle(eyePos,p);
         float dPitch=fabsf(AngleDiff(aimAngle.x,curPitch));
@@ -1881,13 +1857,6 @@ static void RunAimbot(){
         Vec3 headWorld{e.head_ox,e.head_oy,e.head_oz};
         Vec3 viewOff=headWorld-origin;
         Vec3 aimPoint=origin+viewOff;
-        if(g_backtrackEnabled && e.ent_index>0 && e.ent_index<=ESP_MAX_PLAYERS){
-            auto& dq = g_backtrack[e.ent_index];
-            for(const auto& rec : dq){
-                if((DWORD)(nowTick - rec.time) > maxAge) continue;
-                evalPoint(rec.head);
-            }
-        }
         if(g_aimbotBone==1 || g_aimbotBone==2){
             Vec3 bonePos{};
             int boneId = (g_aimbotBone==1) ? BONE_NECK : BONE_SPINE3;
@@ -3019,10 +2988,18 @@ static void DrawMenu(){
 
     if(g_activeTab==0){
         ImGui::SetCursorPos({contentX, contentY});
-        BeginPidoChild("##aim_left", ImVec2(contentW, contentH));
+        BeginPidoChild("##aim_full", ImVec2(contentW, contentH));
         PidoSection("Aimbot");
         PidoToggle("Enable","", &g_aimbotEnabled);
         if(g_aimbotEnabled){
+        PidoSliderFloat("FOV","", &g_aimbotFov, 1.f, 90.f, "%.1f");
+        PidoSliderFloat("Smooth","", &g_aimbotSmooth, 1.f, 30.f, "%.1f");
+        const char* bones[]={"Head","Neck","Chest","Multi"};
+        PidoCombo("Bone","", &g_aimbotBone, bones, IM_ARRAYSIZE(bones));
+        PidoKeybind("Aimbot key","", &g_aimbotKey);
+        PidoToggle("FOV circle","", &g_fovCircleEnabled);
+        PidoToggle("Autostop","", &g_autostopEnabled);
+        }
         PidoSection("Triggerbot");
         PidoToggle("Enable##tb","", &g_tbEnabled);
         PidoSliderInt("Delay (ms)","", &g_tbDelay, 0, 300);
@@ -3031,29 +3008,7 @@ static void DrawMenu(){
         PidoToggle("Enable##rcs","", &g_rcsEnabled);
         PidoSliderFloat("X axis","", &g_rcsX, 0.f, 2.f, "%.2f");
         PidoSliderFloat("Y axis","", &g_rcsY, 0.f, 2.f, "%.2f");
-        PidoSliderFloat("Smooth","", &g_rcsSmooth, 1.f, 20.f, "%.1f");
-        }
-        EndPidoChild();
-
-        ImGui::SetCursorPos({rightX, contentY});
-        BeginPidoChild("##aim_right", ImVec2(childW, contentH));
-        if(g_aimbotEnabled){
-        PidoSection("Aimbot");
-        PidoToggle("Enable##aim","", &g_aimbotEnabled);
-        PidoSliderFloat("FOV","", &g_aimbotFov, 1.f, 30.f, "%.1f");
-        PidoSliderFloat("Smooth","", &g_aimbotSmooth, 1.f, 20.f, "%.1f");
-        const char* bones[]={"Head","Neck","Chest","Multi"};
-        PidoCombo("Bone","", &g_aimbotBone, bones, IM_ARRAYSIZE(bones));
-        PidoKeybind("Aimbot key","", &g_aimbotKey);
-        PidoSection("Backtrack");
-        PidoToggle("Backtrack","", &g_backtrackEnabled);
-        PidoSliderInt("Ms","", &g_backtrackMs, 50, 400);
-        PidoToggle("Autostop","", &g_autostopEnabled);
-        PidoSection("Legitbot");
-        PidoToggle("FOV circle","", &g_fovCircleEnabled);
-        PidoSliderFloat("Aim FOV","", &g_aimbotFov, 1.f, 90.f, "%.1f");
-        PidoSliderFloat("Smoothing","", &g_aimbotSmooth, 1.f, 30.f, "%.1f");
-        }
+        PidoSliderFloat("Smooth##rcs","", &g_rcsSmooth, 1.f, 20.f, "%.1f");
         EndPidoChild();
     }else if(g_activeTab==1){
         ImGui::SetCursorPos({contentX, contentY});
@@ -3210,6 +3165,8 @@ static void DrawKeybindsWindow(){
     ImGui::End();
 }
 
+static constexpr int MAX_PARTICLES = 1500;
+
 static void UpdateAndDrawParticles(float dt,float sw,float sh){
     ImDrawList*dl=ImGui::GetBackgroundDrawList();if(!dl)return;
     static float snowAcc=0.f,sakuraAcc=0.f,starAcc=0.f;
@@ -3218,7 +3175,7 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
     if(g_sakuraEnabled){sakuraAcc+=dt*40.f;}
     if(g_starsEnabled){starAcc+=dt*12.f;}
     const float* vm = g_client ? reinterpret_cast<const float*>(g_client+offsets::client::dwViewMatrix) : nullptr;
-    bool use3D = (vm != nullptr) && g_particlesWorld;
+    bool use3D = (vm != nullptr) && g_particlesWorld && (g_esp_count > 0 || (g_localOrigin.x*g_localOrigin.x + g_localOrigin.y*g_localOrigin.y + g_localOrigin.z*g_localOrigin.z) > 100.f);
     float worldRadius = g_particlesWorldRadius;
     float worldHeight = g_particlesWorldHeight;
     float worldFloor = g_particlesWorldFloor;
@@ -3244,6 +3201,7 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
 
     auto spawn=[&](int count,int type){
         for(int i=0;i<count;i++){
+            if((int)g_particles.size() >= MAX_PARTICLES) break;
             Particle p{};
             p.size=Randf(1.5f,3.5f);
             p.maxlife=Randf(4.f,9.f);
@@ -3672,8 +3630,6 @@ static void DrawESP(){
     ImDrawList*dl=ImGui::GetForegroundDrawList();if(!dl)return;
     const float* vm = g_client ? reinterpret_cast<const float*>(g_client+offsets::client::dwViewMatrix) : nullptr;
     uintptr_t entityList = g_client ? Rd<uintptr_t>(g_client+offsets::client::dwEntityList) : 0;
-    DWORD btNow = g_backtrackVisual ? GetTickCount() : 0;
-    float btMaxAge = g_backtrackVisual ? (float)g_backtrackMs : 0.f;
     for(int i=0;i<g_esp_count;i++){
         const ESPEntry&e=g_esp_players[i];if(!e.valid||e.distance>g_espMaxDist)continue;
         bool enemy=(e.team!=g_esp_local_team);float*ecol=enemy?g_espEnemyCol:g_espTeamCol;
@@ -3683,30 +3639,6 @@ static void DrawESP(){
         ImU32 dimCol=IM_COL32(160,160,170,(int)(180*alpha));
         ImU32 accent=IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(200*alpha));
         float belowY = bb + 3.f;
-        if(g_backtrackVisual && vm && e.ent_index>0 && e.ent_index<=ESP_MAX_PLAYERS){
-            auto& dq = g_backtrack[e.ent_index];
-            for(const auto& rec : dq){
-                float age = static_cast<float>(btNow - rec.time);
-                if(age < 0.f || age > btMaxAge) continue;
-                // Skip records with invalid positions
-                if(fabsf(rec.head.x) < 1.f && fabsf(rec.head.y) < 1.f && fabsf(rec.head.z) < 1.f) continue;
-                if(fabsf(rec.pelvis.x) < 1.f && fabsf(rec.pelvis.y) < 1.f && fabsf(rec.pelvis.z) < 1.f) continue;
-                float a = 1.f - (age / btMaxAge);
-                float hx,hy,px,py;
-                bool hOnScreen = WorldToScreen(vm, rec.head, g_esp_screen_w, g_esp_screen_h, hx, hy);
-                bool pOnScreen = WorldToScreen(vm, rec.pelvis, g_esp_screen_w, g_esp_screen_h, px, py);
-                ImU32 col = IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(120*a));
-                if(hOnScreen && pOnScreen){
-                    dl->AddLine({hx,hy},{px,py},col,2.0f*a+1.0f);
-                    dl->AddCircleFilled({hx,hy}, 4.f*a+2.f, col, 8);
-                    dl->AddCircleFilled({px,py}, 5.f*a+2.5f, col, 8);
-                }else if(hOnScreen){
-                    dl->AddCircleFilled({hx,hy}, 4.f*a+2.f, col, 8);
-                }else if(pOnScreen){
-                    dl->AddCircleFilled({px,py}, 5.f*a+2.5f, col, 8);
-                }
-            }
-        }
         // Shadow + glow layers (ESP)
         dl->AddRectFilled({bl+3.f,bt2+3.f},{br+3.f,bb+3.f},IM_COL32(0,0,0,(int)(45*alpha)));
         dl->AddRectFilled({bl+2.f,bt2+2.f},{br+2.f,bb+2.f},IM_COL32(0,0,0,(int)(50*alpha)));

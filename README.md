@@ -1,5 +1,106 @@
 # LitWare CS2 Internal
 
+**Внутренний чит для Counter-Strike 2.** Инжектируется в `cs2.exe`, перехватывает DirectX 11 Present, рисует ImGui оверлей прямо в игре — без внешнего оверлея и задержки ввода.
+
+| | |
+|---|---|
+| **Платформа** | Windows x64 |
+| **Движок** | Source 2 |
+| **Сборка** | Visual Studio 2022 |
+| **Зависимости** | Steam (gameoverlayrenderer64.dll), ImGui, MinHook |
+
+---
+
+## Возможности
+
+| Категория | Функции |
+|----------|---------|
+| **ESP** | Боксы (угловые/округлые/острые), скелет, полоса HP, имена, оружие, боеприпасы, деньги, дистанция, стрелки за экраном |
+| **Aimbot** | FOV, сглаживание, выбор кости, проверка тиммейтов |
+| **Визуалы** | Без флешки, без дыма, glow, chams (враги/тим/ignore-z), цвет мира/неба, снег, сакура |
+| **Движение** | Bunny hop, strafe helper, anti-aim (spin/desync/jitter) |
+| **Разное** | Третье лицо, смена FOV, радар, таймер бомбы, список зрителей |
+| **Конфиги** | Сохранение/загрузка в `%APPDATA%\litware\` |
+
+**Путь к конфигам:** `%APPDATA%\litware\` (например `C:\Users\<пользователь>\AppData\Roaming\litware\`)
+
+---
+
+## Управление
+
+| Клавиша | Действие |
+|---------|----------|
+| **INSERT** | Вкл/выкл меню |
+| **F1** | Окно хоткеев |
+| **END** | Выгрузка DLL |
+
+---
+
+## Сборка
+
+### Требования
+
+- Visual Studio 2022 (x64 workload)
+- Запущенный Steam (нужен `gameoverlayrenderer64.dll`)
+- Установленная CS2
+
+### Шаги
+
+1. Открыть `litware-dll/litware-dll.vcxproj` в Visual Studio (или `litware-dll.sln` в корне)
+2. Выбрать конфигурацию **Release | x64** (или Debug для логов)
+3. Сборка → `litware-dll/bin/Release/litware-dll.dll`
+4. Инжектить в `cs2.exe` после загрузки главного меню
+
+### Зависимости (в репозитории)
+
+- `litware-dll/external/imgui` — ImGui (встроен)
+- `litware-dll/external/minhook` — MinHook (встроен)
+- `vendor/omath` — математические утилиты
+- `icons/CS2GunIcons.ttf` — иконки оружия
+
+---
+
+## Оффсеты
+
+Оффсеты в `litware-dll/src/core/offsets.h`, синхронизированы с [cs2-dumper](https://github.com/a2x/cs2-dumper).
+
+После обновления игры: запустить cs2-dumper, обновить `offsets/output/` и `offsets.h`.
+
+---
+
+## Структура проекта
+
+```
+├── litware-dll/            # Основная DLL (Litware)
+│   ├── src/                # Исходники
+│   │   ├── hooks/          # render_hook, хук Present
+│   │   ├── core/           # offsets, entity, esp_data
+│   │   └── ...
+│   ├── external/           # ImGui, MinHook (встроены)
+│   └── res/                # Ассеты меню
+├── offsets/                # Вывод cs2-dumper
+├── vendor/omath/           # Математическая библиотека
+└── icons/                  # Шрифты
+```
+
+---
+
+## Лицензия
+
+GPL-3.0 — см. [LICENSE](LICENSE).
+
+---
+
+## Дисклеймер
+
+Только в образовательных целях. Использование на свой риск. Возможны баны VAC.
+
+---
+
+---
+
+# LitWare CS2 Internal
+
 **Internal cheat for Counter-Strike 2.** Injects into `cs2.exe`, hooks DirectX 11 Present, renders an ImGui overlay directly in-game — no external overlay, no input lag.
 
 | | |
@@ -21,6 +122,8 @@
 | **Movement** | Bunny hop, strafe helper, anti-aim (spin/desync/jitter) |
 | **Misc** | Third person, FOV changer, radar, bomb timer, spectator list |
 | **Config** | Save/load to `%APPDATA%\litware\` |
+
+**Config path:** `%APPDATA%\litware\` (e.g. `C:\Users\<user>\AppData\Roaming\litware\`)
 
 ---
 
