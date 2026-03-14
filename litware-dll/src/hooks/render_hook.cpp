@@ -1261,7 +1261,6 @@ static void BuildESPData(){
     uintptr_t localPawn=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
     (void)Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerController); // localCtrl reserved
     int localTeam=0;Vec3 localOrigin{};
-    DWORD nowTick = GetTickCount();
     if(localPawn){localTeam=(int)Rd<uint8_t>(localPawn+offsets::base_entity::m_iTeamNum);
     uintptr_t sc0=Rd<uintptr_t>(localPawn+offsets::base_entity::m_pGameSceneNode);
     if(sc0)localOrigin=Rd<Vec3>(sc0+offsets::scene_node::m_vecAbsOrigin);}
@@ -1434,14 +1433,14 @@ static void DrawSpectatorList(float sw){
     if(g_weAreSpectating && g_spectatingTarget[0]){
         char buf[80];
         std::snprintf(buf, sizeof(buf), "Spectating: %s", g_spectatingTarget);
-        ImVec2 ts = f->CalcTextSizeA(f->FontSize, FLT_MAX, 0.f, buf);
+        ImVec2 ts = f->CalcTextSizeA(f->LegacySize, FLT_MAX, 0.f, buf);
         float w = ts.x + pad*2.f; w = (std::max)(w, 120.f);
         float x = sw - w - 15.f;
         dl->AddRectFilled({x, y}, {x+w, y+28.f}, bgFill, 6.f);
         dl->AddRect({x, y}, {x+w, y+28.f}, stroke, 6.f, 0, 1.f);
-        dl->AddText(f, f->FontSize, {x+pad, y+6.f}, accent, "Spectating:");
-        float nx = x + pad + f->CalcTextSizeA(f->FontSize, FLT_MAX, 0.f, "Spectating: ").x;
-        dl->AddText(f, f->FontSize, {nx, y+6.f}, textCol, g_spectatingTarget);
+        dl->AddText(f, f->LegacySize, {x+pad, y+6.f}, accent, "Spectating:");
+        float nx = x + pad + f->CalcTextSizeA(f->LegacySize, FLT_MAX, 0.f, "Spectating: ").x;
+        dl->AddText(f, f->LegacySize, {nx, y+6.f}, textCol, g_spectatingTarget);
         return;
     }
     if(g_spectatorCount <= 0) return;
@@ -1449,7 +1448,7 @@ static void DrawSpectatorList(float sw){
     float boxH = pad*2.f + (float)g_spectatorCount * lineH;
     float maxW = 80.f;
     for(int i = 0; i < g_spectatorCount; i++){
-        ImVec2 ts = f->CalcTextSizeA(f->FontSize, FLT_MAX, 0.f, g_spectatorNames[i]);
+        ImVec2 ts = f->CalcTextSizeA(f->LegacySize, FLT_MAX, 0.f, g_spectatorNames[i]);
         if(ts.x > maxW) maxW = ts.x;
     }
     float boxW = maxW + pad*2.f; boxW = (std::max)(boxW, 100.f);
@@ -1457,9 +1456,9 @@ static void DrawSpectatorList(float sw){
     dl->AddRectFilled({x, y}, {x+boxW, y+boxH}, bgFill, 6.f);
     dl->AddRect({x, y}, {x+boxW, y+boxH}, stroke, 6.f, 0, 1.f);
     dl->AddRectFilled({x+12.f, y+22.f}, {x+boxW-12.f, y+24.f}, accent, 3.f);
-    dl->AddText(f, f->FontSize, {x+pad, y+4.f}, accent, "Spectators");
+    dl->AddText(f, f->LegacySize, {x+pad, y+4.f}, accent, "Spectators");
     for(int i = 0; i < g_spectatorCount; i++){
-        dl->AddText(fReg, fReg->FontSize - 1.f, {x+pad, y+pad+18.f+(float)i*lineH}, textCol, g_spectatorNames[i]);
+        dl->AddText(fReg, fReg->LegacySize - 1.f, {x+pad, y+pad+18.f+(float)i*lineH}, textCol, g_spectatorNames[i]);
     }
 }
 
@@ -2524,11 +2523,12 @@ static bool PidoTab(const char* icon, const char* label, const char* desc, bool 
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (size.y - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (size.y - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+36.f*s, labelY}, textCol, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+36.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));  // satisfy ImGui 1.92 layout: extend boundaries after SetCursorScreenPos
     ImGui::PopID();
     return pressed;
 }
@@ -2554,7 +2554,7 @@ static bool PidoToggle(const char* label, const char* desc, bool* v){
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2566,6 +2566,7 @@ static bool PidoToggle(const char* label, const char* desc, bool* v){
     dl->AddCircleFilled({knobX, tPos.y + r}, r-2.f, IM_COL32(245,245,250,255), 20);
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return pressed;
 }
@@ -2590,7 +2591,7 @@ static bool PidoSliderFloat(const char* label, const char* desc, float* v, float
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2607,6 +2608,7 @@ static bool PidoSliderFloat(const char* label, const char* desc, float* v, float
     ImGui::PopItemWidth();
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return changed;
 }
@@ -2631,7 +2633,7 @@ static bool PidoSliderInt(const char* label, const char* desc, int* v, int v_min
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2648,6 +2650,7 @@ static bool PidoSliderInt(const char* label, const char* desc, int* v, int v_min
     ImGui::PopItemWidth();
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return changed;
 }
@@ -2672,7 +2675,7 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2690,6 +2693,7 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     ImGui::PopItemWidth();
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return changed;
 }
@@ -2714,7 +2718,7 @@ static bool PidoColorEdit4(const char* label, const char* desc, float col[4], Im
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2724,6 +2728,7 @@ static bool PidoColorEdit4(const char* label, const char* desc, float col[4], Im
     ImGui::PopStyleVar();
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return changed;
 }
@@ -2748,7 +2753,7 @@ static bool PidoInputText(const char* label, const char* desc, char* buf, size_t
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2763,6 +2768,7 @@ static bool PidoInputText(const char* label, const char* desc, char* buf, size_t
     ImGui::PopItemWidth();
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return changed;
 }
@@ -2788,7 +2794,7 @@ static bool PidoKeybind(const char* label, const char* desc, int* key){
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->FontSize*s)*0.5f;
+    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
     dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
     if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
 
@@ -2816,6 +2822,7 @@ static bool PidoKeybind(const char* label, const char* desc, int* key){
     }
 
     ImGui::SetCursorScreenPos(nextPos);
+    ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
     return false;
 }
@@ -3407,8 +3414,8 @@ static void DrawWatermark(float sw){
     const int nItems=g_showFpsWatermark?3:2;
     float totalW=0.f, maxH=0.f;
     for(int i=0;i<nItems;++i){
-        ImVec2 s=wmFont->CalcTextSizeA(wmFont->FontSize,FLT_MAX,0.f,items[i]);
-        totalW+=s.x; if(i<nItems-1) totalW+=wmFont->CalcTextSizeA(wmFont->FontSize,FLT_MAX,0.f," | ").x;
+        ImVec2 s=wmFont->CalcTextSizeA(wmFont->LegacySize,FLT_MAX,0.f,items[i]);
+        totalW+=s.x; if(i<nItems-1) totalW+=wmFont->CalcTextSizeA(wmFont->LegacySize,FLT_MAX,0.f," | ").x;
         if(s.y>maxH) maxH=s.y;
     }
     float pad=12.f, spacing=12.f;
@@ -3427,15 +3434,15 @@ static void DrawWatermark(float sw){
     float curX=pos.x+pad;
     float centerY=pos.y+size.y*0.5f;
     for(int i=0;i<nItems;++i){
-        ImVec2 ts=wmFont->CalcTextSizeA(wmFont->FontSize,FLT_MAX,0.f,items[i]);
+        ImVec2 ts=wmFont->CalcTextSizeA(wmFont->LegacySize,FLT_MAX,0.f,items[i]);
         float y=centerY-ts.y*0.5f;
         ImU32 col=(i==0)?accent:textCol;
-        dl->AddText(wmFont,wmFont->FontSize,{curX,y},col,items[i]);
+        dl->AddText(wmFont,wmFont->LegacySize,{curX,y},col,items[i]);
         curX+=ts.x;
         if(i<nItems-1){
             curX+=spacing;
-            ImVec2 sepSz=wmFont->CalcTextSizeA(wmFont->FontSize,FLT_MAX,0.f," | ");
-            dl->AddText(wmFont,wmFont->FontSize,{curX,y},textCol," | ");
+            ImVec2 sepSz=wmFont->CalcTextSizeA(wmFont->LegacySize,FLT_MAX,0.f," | ");
+            dl->AddText(wmFont,wmFont->LegacySize,{curX,y},textCol," | ");
             curX+=sepSz.x+spacing;
         }
     }
@@ -4043,6 +4050,7 @@ static void InitImGui(IDXGISwapChain*sc){
     g_origWndProc=(WNDPROC)SetWindowLongPtrA(g_gameHwnd,GWLP_WNDPROC,(LONG_PTR)HookWndProc);
     IMGUI_CHECKVERSION();ImGui::CreateContext();ImGuiIO&io=ImGui::GetIO();
     io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NoMouseCursorChange;
+    io.ConfigErrorRecoveryEnableAssert=false;  // avoid crash on SetCursorPos/SetCursorScreenPos boundary (Pido)
     ImFontConfig fc{};fc.SizePixels=17.f;fc.FontDataOwnedByAtlas=false;
     font::lexend_bold = io.Fonts->AddFontFromMemoryTTF((void*)lexend_bold, (int)sizeof(lexend_bold), 17.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
     fc.SizePixels=14.f;
@@ -4195,6 +4203,9 @@ HRESULT __stdcall HookPresent(IDXGISwapChain*sc,UINT sync,UINT flags){
         s_crashCount++;
         g_safeMode = true;  // skip game reads next frames
         g_esp_count = 0; g_esp_oof_count = 0; g_espEnabled = false;
+        if(g_imguiInitialized){
+            __try { ImGui::EndFrame(); } __except(EXCEPTION_EXECUTE_HANDLER){}
+        }
         DWORD now = GetTickCount();
         if(now - s_lastCrashTime > 5000){
             s_lastCrashTime = now;

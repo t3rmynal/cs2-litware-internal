@@ -51,12 +51,17 @@
 3. Сборка → `litware-dll/bin/Release/litware-dll.dll`
 4. Инжектить в `cs2.exe` после загрузки главного меню
 
-### Зависимости (в репозитории)
+### Зависимости (submodules)
 
-- `litware-dll/external/imgui` — ImGui (встроен)
-- `litware-dll/external/minhook` — MinHook (встроен)
+- `litware-dll/external/imgui` — ImGui
+- `litware-dll/external/minhook` — MinHook
 - `vendor/omath` — математические утилиты
 - `icons/CS2GunIcons.ttf` — иконки оружия
+
+**Клонирование:**
+```bash
+git clone --recurse-submodules --remote-submodules https://github.com/t3rmynal/cs2-litware-internal.git
+```
 
 ---
 
@@ -152,12 +157,17 @@ GPL-3.0 — см. [LICENSE](LICENSE).
 3. Build → `litware-dll/bin/Release/litware-dll.dll`
 4. Inject into `cs2.exe` after the main menu loads
 
-### Dependencies (in repo)
+### Dependencies (submodules)
 
-- `litware-dll/external/imgui` — ImGui (bundled)
-- `litware-dll/external/minhook` — MinHook (bundled)
+- `litware-dll/external/imgui` — ImGui
+- `litware-dll/external/minhook` — MinHook
 - `vendor/omath` — math utilities
 - `icons/CS2GunIcons.ttf` — weapon icons
+
+**Clone:**
+```bash
+git clone --recurse-submodules --remote-submodules https://github.com/t3rmynal/cs2-litware-internal.git
+```
 
 ---
 
