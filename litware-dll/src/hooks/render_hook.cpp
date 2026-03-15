@@ -2048,7 +2048,7 @@ static void RunRCS(){
     if(!(GetAsyncKeyState(VK_LBUTTON)&0x8000)){g_rcsPrevPunchX=0.f;g_rcsPrevPunchY=0.f;return;}  // Only when shooting
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
-    if(shots<2){g_rcsPrevPunchX=0.f;g_rcsPrevPunchY=0.f;return;}
+    if(shots<1){g_rcsPrevPunchX=0.f;g_rcsPrevPunchY=0.f;return;}
 
     float punchX=Rd<float>(lp+offsets::cs_pawn::m_aimPunchAngle);
     float punchY=Rd<float>(lp+offsets::cs_pawn::m_aimPunchAngle+4);
