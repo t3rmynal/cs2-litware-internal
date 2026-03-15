@@ -15,15 +15,9 @@
 
 ## Скриншоты
 
-**Меню**
-
-![LitWare Menu](screenshots/menu.jpg)
-
-**Визуалы**
-
-![Visuals Blue](screenshots/visuals_blue.jpg)
-
-![Visuals Pink](screenshots/visuals_pink.jpg)
+| Меню | Визуалы |
+|:----:|:-------:|
+| <img src="screenshots/menu.jpg" width="280"> | <img src="screenshots/visuals_blue.jpg" width="280"><br><img src="screenshots/visuals_pink.jpg" width="280"> |
 
 ---
 
@@ -135,15 +129,9 @@ GPL-3.0 — см. [LICENSE](LICENSE).
 
 ## Screenshots
 
-**Menu**
-
-![LitWare Menu](screenshots/menu.jpg)
-
-**Visuals**
-
-![Visuals Blue](screenshots/visuals_blue.jpg)
-
-![Visuals Pink](screenshots/visuals_pink.jpg)
+| Menu | Visuals |
+|:----:|:-------:|
+| <img src="screenshots/menu.jpg" width="280"> | <img src="screenshots/visuals_blue.jpg" width="280"><br><img src="screenshots/visuals_pink.jpg" width="280"> |
 
 ---
 
