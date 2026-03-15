@@ -17,7 +17,7 @@
 
 | Меню | Визуалы |
 |:----:|:-------:|
-| <img src="screenshots/menu.jpg" width="280"> | <img src="screenshots/visuals_blue.jpg" width="280"><br><img src="screenshots/visuals_pink.jpg" width="280"> |
+| <img src="screenshots/menu.jpg" width="320"> | <img src="screenshots/visuals_blue.jpg" width="320"> |
 
 ---
 
@@ -131,7 +131,7 @@ GPL-3.0 — см. [LICENSE](LICENSE).
 
 | Menu | Visuals |
 |:----:|:-------:|
-| <img src="screenshots/menu.jpg" width="280"> | <img src="screenshots/visuals_blue.jpg" width="280"><br><img src="screenshots/visuals_pink.jpg" width="280"> |
+| <img src="screenshots/menu.jpg" width="320"> | <img src="screenshots/visuals_blue.jpg" width="320"> |
 
 ---
 

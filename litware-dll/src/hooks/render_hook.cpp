@@ -1933,22 +1933,20 @@ static void DrawDebugConsole() {
     ImGui::End();
 }
 
-// Bunnyhop: auto-jump when holding space.
+// Bunnyhop: auto-jump when holding space. In air we release jump so game allows next jump on landing.
 static void RunBHop(){
     if(!g_bhopEnabled||!g_client)return;
     if(g_menuOpen) return;
 
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     uint32_t flags=Rd<uint32_t>(lp+offsets::base_entity::m_fFlags);
-    bool onGround = (flags & 1) != 0; 
+    bool onGround = (flags & 1) != 0;
     
     if(GetAsyncKeyState(VK_SPACE)&0x8000){
         if(onGround) {
-            Wr<int>(g_client+offsets::buttons::jump, 65537);
+            Wr<int>(g_client+offsets::buttons::jump, 65537);  // press
         } else {
-            Wr<int>(g_client+offsets::buttons::jump, 256);
-            Wr<int>(g_client+offsets::buttons::jump, 65537);
-            Wr<int>(g_client+offsets::buttons::jump, 256);
+            Wr<int>(g_client+offsets::buttons::jump, 256);    // release only - key up
         }
     }
 }
