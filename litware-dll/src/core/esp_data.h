@@ -8,6 +8,9 @@ struct ESPEntry {
     bool  planting;
     bool  scoped;
     bool  spotted;
+    bool  defusing;
+    bool  hasBomb;
+    bool  hasKits;
     int   ent_index;
     uintptr_t pawn;
     uintptr_t controller;

@@ -86,6 +86,8 @@ namespace offsets {
     // -- C_CSPlayerPawnBase --
     namespace cs_pawn_base {
         constexpr uintptr_t m_flFlashDuration = 0x15F8;
+        constexpr uintptr_t m_flFlashMaxAlpha = 0x15FC;
+        constexpr uintptr_t m_flLastSmokeOverlayAlpha = 0x1618;  // smoke overlay alpha (0=invisible)
         constexpr uintptr_t m_pGlowServices   = 0x1678;
     }
 
@@ -113,6 +115,7 @@ namespace offsets {
         constexpr uintptr_t m_bPawnIsAlive         = 0x914;
         constexpr uintptr_t m_iPawnHealth          = 0x918;
         constexpr uintptr_t m_pInGameMoneyServices = 0x808;
+        constexpr uintptr_t m_bPawnHasDefuser      = 0x920;  // defuse kit
     }
 
     // -- CCSPlayerController_InGameMoneyServices --
@@ -123,6 +126,11 @@ namespace offsets {
     // -- C_BaseModelEntity --
     namespace model_entity {
         constexpr uintptr_t m_Glow = 0xCC0;
+        constexpr uintptr_t m_pClientAlphaProperty = 0xE38;
+    }
+    // -- CClientAlphaProperty --
+    namespace client_alpha_prop {
+        constexpr uintptr_t m_nAlpha = 0x17;
     }
 
     // -- CGlowProperty --
@@ -146,6 +154,7 @@ namespace offsets {
     // -- CPlayer_WeaponServices --
     namespace weapon_services {
         constexpr uintptr_t m_hActiveWeapon = 0x60;
+        constexpr uintptr_t m_hMyWeapons   = 0x48;   // C_NetworkUtlVectorBase<CHandle>
     }
 
     // -- C_BasePlayerWeapon --
@@ -172,6 +181,7 @@ namespace offsets {
         constexpr uintptr_t m_flC4Blow       = 0x11A0;
         constexpr uintptr_t m_bBeingDefused  = 0x11AC;
         constexpr uintptr_t m_flDefuseCountDown = 0x11C0;
+        constexpr uintptr_t m_hBombDefuser   = 0x11C8;  // CHandle to defusing pawn
     }
 
     // -- C_SmokeGrenadeProjectile --

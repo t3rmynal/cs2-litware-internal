@@ -150,6 +150,7 @@ static int g_aimbotKey = VK_LBUTTON;  // LMB default
 static float g_aimbotFov = 5.f;
 static float g_aimbotSmooth = 6.f;
 static bool g_fovCircleEnabled = false;
+static float g_fovCircleCol[4]{0.4f,0.7f,1.f,0.5f};  // R,G,B,A for FOV circle
 static bool g_aimbotTeamChk = true;
 static int g_aimbotBone = 0;
 static int g_aimbotWeaponFilter = 0;  // 0=All 1=Rifles 2=Snipers 3=Pistols
@@ -164,7 +165,10 @@ static int g_tbDelay = 50;
 static bool g_tbTeamChk = true;
 static DWORD g_tbFireTime = 0;
 static bool g_tbShouldFire = false;
-static bool g_tbJustFired = false;  // Release attack on next frame after firing
+static bool g_bombDefusing = false;
+static uintptr_t g_bombDefuserPawn = 0;  // pawn who is defusing (for ESP status)
+static bool g_tbJustFired = false;  // Release attack after hold frames
+static int g_tbHoldFramesLeft = 0;  // Hold IN_ATTACK for N frames so game picks it up (internal reads input once per frame)
 static bool g_dtEnabled = false;
 static int g_dtKey = 0;
 static bool g_bhopEnabled = false;
@@ -207,6 +211,8 @@ static DWORD g_lastHitmarkerTime = 0;
 static bool g_killEffectEnabled = false;
 static float g_killEffectDuration = 0.6f;
 static DWORD g_lastKillEffectTime = 0;
+static Vec3 g_lastKillEffectPos{};  // victim head position for kill particles
+static bool g_pendingKillParticles = false;  // spawn 67+LitWare burst on next particle update
 static int g_hitEffectType = 0;   // 0=none 1=cross 2=screen flash 3=circle
 static int g_killEffectType = 1;  // 0=none 1=burst 2=KILL text
 static float g_hitEffectCol[4]{1.f,0.9f,0.2f,0.9f};
@@ -364,6 +370,11 @@ struct LogEntry{char text[256];ImU32 color;float lifetime,maxlife;int type;};  /
 static std::deque<LogEntry>g_logs;
 static DWORD g_lastSoundPingTick[ESP_MAX_PLAYERS + 1] = {};
 static bool g_visMap[ESP_MAX_PLAYERS + 1] = {};
+// Anti-flicker: stale cache keeps drawing entities for 80ms after they disappear; visibility hysteresis
+static ESPEntry g_esp_stale[ESP_MAX_PLAYERS + 1] = {};
+static DWORD g_esp_stale_tick[ESP_MAX_PLAYERS + 1] = {};
+static DWORD g_visLastTrueTick[ESP_MAX_PLAYERS + 1] = {};
+static constexpr DWORD ESP_STALE_MS = 80;
 
 // Math
 static inline float Clampf(float v, float lo, float hi){return v<lo?lo:(v>hi?hi:v);}
@@ -384,11 +395,7 @@ static inline ImU32 WithAlpha(ImU32 col, float a){
 
 static inline uintptr_t ViewAnglesAddr(){
     if(!g_client) return 0;
-    uintptr_t input = Rd<uintptr_t>(g_client + offsets::client::dwCSGOInput);
-    if(input && input > 0x10000 && input < 0x7FFFFFFFFFFF){
-        std::ptrdiff_t vaOff = (std::ptrdiff_t)offsets::client::dwViewAngles - (std::ptrdiff_t)offsets::client::dwCSGOInput;
-        return input + vaOff;
-    }
+    // cs2-dumper provides dwViewAngles as a client.dll absolute offset (not CInput-relative).
     return g_client + offsets::client::dwViewAngles;
 }
 
@@ -759,6 +766,22 @@ static int GetWeaponClip(uintptr_t weapon){
     return Rd<int>(weapon + offsets::base_weapon::m_iClip1);
 }
 
+static bool PlayerHasWeaponId(uintptr_t pawn, uintptr_t entityList, int weaponId){
+    if(!pawn||!entityList) return false;
+    uintptr_t ws = Rd<uintptr_t>(pawn + offsets::base_pawn::m_pWeaponServices);
+    if(!ws) return false;
+    uintptr_t vecBase = ws + offsets::weapon_services::m_hMyWeapons;
+    int count = Rd<int>(vecBase); if(count<=0||count>16) return false;
+    uintptr_t data = Rd<uintptr_t>(vecBase + 8);
+    if(!data) return false;
+    for(int i=0;i<count;i++){
+        uint32_t h = Rd<uint32_t>(data + (size_t)i*4);
+        uintptr_t w = ResolveHandle(entityList, h);
+        if(w && GetWeaponId(w)==weaponId) return true;
+    }
+    return false;
+}
+
 static int GetPlayerMoney(uintptr_t controller){
     if(!controller) return 0;
     uintptr_t ms = Rd<uintptr_t>(controller + offsets::controller::m_pInGameMoneyServices);
@@ -873,6 +896,7 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="aimbot_fov"){ float v; if(ParseFloat(val,v)) g_aimbotFov=v; else ok=false; return true; }
     if(key=="aimbot_smooth"){ float v; if(ParseFloat(val,v)) g_aimbotSmooth=v; else ok=false; return true; }
     if(key=="fov_circle"){ g_fovCircleEnabled=ParseBool(val); return true; }
+    if(key=="fov_circle_col"){ if(!ParseColor4(val,g_fovCircleCol)) ok=false; return true; }
     if(key=="aimbot_team"){ g_aimbotTeamChk=ParseBool(val); return true; }
     if(key=="aimbot_bone"){ int v; if(ParseInt(val,v)) g_aimbotBone=v; else ok=false; return true; }
     if(key=="rcs_enabled"){ g_rcsEnabled=ParseBool(val); return true; }
@@ -910,6 +934,7 @@ static bool LoadConfigKeyVisual(const std::string& key, const std::string& val, 
     if(key=="sakura"){ g_sakuraEnabled=ParseBool(val); return true; }
     if(key=="sakura_col"){ if(!ParseColor4(val,g_sakuraCol)) ok=false; return true; }
     if(key=="stars"){ g_starsEnabled=ParseBool(val); return true; }
+    if(key=="kill_effect"){ g_killEffectEnabled=ParseBool(val); return true; }
     if(key=="particles_world"){ g_particlesWorld=ParseBool(val); return true; }
     if(key=="particles_world_radius"){ float v; if(ParseFloat(val,v)) g_particlesWorldRadius=v; else ok=false; return true; }
     if(key=="particles_world_height"){ float v; if(ParseFloat(val,v)) g_particlesWorldHeight=v; else ok=false; return true; }
@@ -1006,6 +1031,8 @@ static void ApplyDefaults(){
     g_aimbotKey = VK_LBUTTON;
     g_aimbotFov = 5.f;
     g_aimbotSmooth = 6.f;
+    g_fovCircleEnabled = false;
+    g_fovCircleCol[0]=0.4f; g_fovCircleCol[1]=0.7f; g_fovCircleCol[2]=1.f; g_fovCircleCol[3]=0.5f;
     g_aimbotTeamChk = true;
     g_aimbotBone = 0;
     g_rcsEnabled = false;
@@ -1034,6 +1061,7 @@ static void ApplyDefaults(){
     g_sakuraEnabled = false;
     g_sakuraCol[0]=1.f; g_sakuraCol[1]=0.55f; g_sakuraCol[2]=0.7f; g_sakuraCol[3]=0.85f;
     g_starsEnabled = false;
+    g_killEffectEnabled = false;
     g_particlesWorld = true;
     g_particlesWorldRadius = 600.f;
     g_particlesWorldHeight = 320.f;
@@ -1156,6 +1184,7 @@ static bool SaveConfig(const char* name){
     WriteFloat(out, "tp_dist", g_tpDist);
     WriteFloat(out, "tp_height", g_tpHeightOffset);
     WriteBool(out, "fov_circle", g_fovCircleEnabled);
+    WriteColor(out, "fov_circle_col", g_fovCircleCol);
     WriteBool(out, "hands_color_enabled", g_handsColorEnabled);
     WriteColor(out, "hands_color", g_handsColor);
     WriteBool(out, "snow", g_snowEnabled);
@@ -1163,6 +1192,7 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "sakura", g_sakuraEnabled);
     WriteColor(out, "sakura_col", g_sakuraCol);
     WriteBool(out, "stars", g_starsEnabled);
+    WriteBool(out, "kill_effect", g_killEffectEnabled);
     WriteBool(out, "particles_world", g_particlesWorld);
     WriteFloat(out, "particles_world_radius", g_particlesWorldRadius);
     WriteFloat(out, "particles_world_height", g_particlesWorldHeight);
@@ -1291,7 +1321,11 @@ static void BuildESPData(){
         }
         if(i > 0 && i <= ESP_MAX_PLAYERS && g_visCheckEnabled) { /* g_visMap updated above */ }
         else if(i > 0 && i <= ESP_MAX_PLAYERS) g_visMap[i] = vis;
-        if(g_espOnlyVis&&!vis)continue;
+        // Visibility hysteresis: once visible, stay visible for 80ms to reduce flicker
+        if(i > 0 && i <= ESP_MAX_PLAYERS && vis) g_visLastTrueTick[i] = GetTickCount();
+        DWORD now = GetTickCount();
+        bool effVis = vis || (i > 0 && i <= ESP_MAX_PLAYERS && (now - g_visLastTrueTick[i]) < 80);
+        if(g_espOnlyVis && !effVis) continue;
         uintptr_t scn=Rd<uintptr_t>(pawn+offsets::base_entity::m_pGameSceneNode);
         Vec3 origin{};if(scn)origin=Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
         Vec3 viewOff=Rd<Vec3>(pawn+offsets::base_pawn::m_vecViewOffset);Vec3 head=origin+viewOff;
@@ -1331,10 +1365,13 @@ static void BuildESPData(){
         uintptr_t namePtr=Rd<uintptr_t>(ctrl+offsets::controller::m_sSanitizedPlayerName);
         float flashDur=Rd<float>(pawn+offsets::cs_pawn_base::m_flFlashDuration);
         ESPEntry&e=g_esp_players[g_esp_count++];
-        e.valid=true;e.visible=vis;e.flashed=(flashDur>0.1f);
+        e.valid=true;e.visible=effVis;e.flashed=(flashDur>0.1f);
         e.planting=Rd<bool>(pawn+offsets::cs_pawn::m_bIsPlantingViaUse);
         e.scoped=Rd<bool>(pawn+offsets::cs_pawn::m_bIsScoped);
-        e.spotted=vis;
+        e.defusing=(g_bombDefusing&&g_bombDefuserPawn==pawn);
+        e.hasBomb=entityList?PlayerHasWeaponId(pawn,entityList,88):false;
+        e.hasKits=Rd<bool>(ctrl+offsets::controller::m_bPawnHasDefuser);
+        e.spotted=effVis;
         e.ent_index=i;
         e.pawn=pawn;
         e.controller=ctrl;
@@ -1345,6 +1382,9 @@ static void BuildESPData(){
         e.box_l=cx-boxW*0.5f;e.box_r=cx+boxW*0.5f;e.box_t=top;e.box_b=bot;
         e.health=health;e.team=team;e.distance=dist;e.yaw=0.f;
         RdName(namePtr,e.name,sizeof(e.name));
+        // Stale cache: keep last-known data for anti-flicker
+        g_esp_stale[i] = e;
+        g_esp_stale_tick[i] = GetTickCount();
     }
 }
 
@@ -1486,7 +1526,11 @@ static void ProcessHitEvents(){
             if(g_killNotifEnabled) PushNotification(buf, IM_COL32(140,100,255,255));
             LogEntry le{}; std::snprintf(le.text,sizeof(le.text),"%s",buf); le.color=IM_COL32(140,100,255,255); le.maxlife=4.f; le.lifetime=4.f; le.type=1;
             g_logs.push_back(le); if(g_logs.size()>8)g_logs.pop_front();
-            if(g_killEffectEnabled) g_lastKillEffectTime = GetTickCount();
+            if(g_killEffectEnabled){
+                g_lastKillEffectTime = GetTickCount();
+                g_lastKillEffectPos = {e.head_ox, e.head_oy, e.head_oz};
+                g_pendingKillParticles = true;
+            }
         }
         g_lastHealth[e.ent_index] = e.health;
     }
@@ -1500,31 +1544,35 @@ static void RunNoFlash(){
     __try{
         uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
         if(!lp||!IsLikelyPtr(lp))return;
-        float dur=Rd<float>(lp+offsets::cs_pawn_base::m_flFlashDuration);
-        if(dur>0.01f) Wr<float>(lp+offsets::cs_pawn_base::m_flFlashDuration,0.f);
+        uintptr_t flashAddr=lp+offsets::cs_pawn_base::m_flFlashDuration;
+        if(!IsLikelyPtr((uintptr_t)flashAddr))return;  // avoid writing to obviously bad addr
+        float dur=Rd<float>(flashAddr);
+        if(dur>0.01f){
+            Wr<float>(flashAddr,0.f);
+            Wr<float>(lp+offsets::cs_pawn_base::m_flFlashMaxAlpha,0.f);
+        }
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
 
 static void RunNoSmoke(){
     if(!g_noSmoke||!g_client) return;
-    DWORD now = GetTickCount();
-    if(now - g_lastNoSmokeTick < 200) return;
-    g_lastNoSmokeTick = now;
-    // 85% transparency = 15% opacity (255 * 0.15 = 38)
-    // Writing m_bSmokeEffectSpawned=0 crashes, so we use scene node alpha
-    constexpr uint8_t SMOKE_ALPHA_85PCT_TRANSPARENT = 38;
     __try{
+        // Approach 1: Zero smoke overlay alpha on local pawn (per-player smoke visibility)
+        uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
+        if(lp&&IsLikelyPtr(lp)) Wr<float>(lp+offsets::cs_pawn_base::m_flLastSmokeOverlayAlpha,0.f);
+        // Approach 2: Set entity alpha via ClientAlphaProperty on smoke projectiles
+        DWORD now = GetTickCount();
+        if(now - g_lastNoSmokeTick < 100) return;
+        g_lastNoSmokeTick = now;
         uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
-        for(int i=1;i<512;i++){
+        for(int i=0;i<2048;i++){
             uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
             uintptr_t ent=Rd<uintptr_t>(chunk+112*(i&0x1FF));if(!ent||!IsLikelyPtr(ent))continue;
             __try{
                 uint8_t spawned=Rd<uint8_t>(ent+offsets::smoke_projectile::m_bSmokeEffectSpawned);
                 if(!spawned)continue;
-                uintptr_t scn = Rd<uintptr_t>(ent+offsets::base_entity::m_pGameSceneNode);
-                if(!scn||!IsLikelyPtr(scn))continue;
-                // Validate scene node is in reasonable range before writing
-                Wr<uint8_t>(scn + 0x53, SMOKE_ALPHA_85PCT_TRANSPARENT);
+                uintptr_t alphaProp=Rd<uintptr_t>(ent+offsets::model_entity::m_pClientAlphaProperty);
+                if(alphaProp&&IsLikelyPtr(alphaProp)) Wr<uint8_t>(alphaProp+offsets::client_alpha_prop::m_nAlpha,0);
             }__except(EXCEPTION_EXECUTE_HANDLER){}
         }
     }__except(EXCEPTION_EXECUTE_HANDLER){}
@@ -1632,24 +1680,19 @@ static void RunAutostop(){
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
 
+// Bunnyhop: auto-jump when holding space. On ground=65537, in air=256 (per blast.hk/internal cheat convention)
 static void RunBHop(){
     if(!g_bhopEnabled||!g_client)return;
+    if(g_menuOpen)return;  // Don't bhop while menu is open
     if(!(GetAsyncKeyState(VK_SPACE)&0x8000))return;  // Only when holding space
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     uint32_t flags=Rd<uint32_t>(lp+offsets::base_entity::m_fFlags);
-    static bool wasOnGround = false;
-    bool onGround = (flags & 1) != 0;
+    bool onGround = (flags & 1) != 0;  // FL_ONGROUND = bit 0
 
     if(onGround){
-        // On ground - press jump for next bhop
-        Wr<int>(g_client+offsets::buttons::jump, 65537);  // 65537 = pressed
-        wasOnGround = true;
+        Wr<int>(g_client+offsets::buttons::jump, 65537);  // Press jump
     }else{
-        // In air - release jump after a frame delay to avoid double-tap
-        if(wasOnGround){
-            wasOnGround = false;
-        }
-        Wr<int>(g_client+offsets::buttons::jump, 0);   // 0 = released
+        Wr<int>(g_client+offsets::buttons::jump, 256);   // Release in air (required for bhop - game needs "new" press on land)
     }
 }
 
@@ -1771,25 +1814,26 @@ static void RunRCS(){
     g_rcsPrevPunchX=punchX;g_rcsPrevPunchY=punchY;
 }
 
-// Auto Strafe (Darkside/help-learn): optimal turn = asin(sv_airaccel/speed) for max gain
+// Auto Strafe: optimal yaw turn for max air speed gain (sv_airaccelerate/speed formula)
 static void RunStrafeHelper(){
     if(!g_strafeEnabled||!g_client) return;
+    if(g_menuOpen) return;
     if(g_strafeKey!=0&&!(GetAsyncKeyState(g_strafeKey)&0x8000)) return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp) return;
     if(Rd<uint32_t>(lp+offsets::base_entity::m_fFlags)&1) return;  // On ground - no strafe
+    bool scoped=Rd<bool>(lp+offsets::cs_pawn::m_bIsScoped); if(scoped) return;  // Don't override aim when scoped
     bool left=(GetAsyncKeyState('A')&0x8000)!=0;
     bool right=(GetAsyncKeyState('D')&0x8000)!=0;
     if(!left&&!right) return;
-    uintptr_t vaAddr=ViewAnglesAddr();
+    uintptr_t vaAddr=ViewAnglesAddr(); if(!vaAddr) return;
     float curYaw=Rd<float>(vaAddr+4);
     Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
     float speed2d=sqrtf(vel.x*vel.x+vel.y*vel.y);
-    // Darkside formula: sv_airaccelerate default 12, optimal turn ~2*asin(12/speed) degrees
     const float sv_airaccel=12.f;
     float optimalTurn=15.f;
     if(speed2d>5.f){
         float ratio=Clampf(sv_airaccel/(speed2d+1.f),0.01f,1.f);
-        optimalTurn=2.f*57.2958f*asinf(ratio);  // radians to degrees
+        optimalTurn=2.f*57.2958f*asinf(ratio);
         optimalTurn=Clampf(optimalTurn,2.f,25.f);
     }
     float turnAmount=(left?-optimalTurn:0.f)+(right?optimalTurn:0.f);
@@ -1798,41 +1842,51 @@ static void RunStrafeHelper(){
     Wr<float>(vaAddr+4,newYaw);
 }
 
+// Entity list stride (Source2: often 112/0x70; if trigger stops working after game update try 120/0x78)
+static constexpr int kEntityListStride = 112;
 static void RunTriggerBot(){
     if(!g_tbEnabled||!g_client)return;
     if(g_tbKey!=0&&!(GetAsyncKeyState(g_tbKey)&0x8000)){g_tbShouldFire=false;return;}
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
-    int entIdx=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);if(entIdx<=0){g_tbShouldFire=false;return;}
+    int entIdx=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
+    if(entIdx<=0||entIdx>8192){g_tbShouldFire=false;return;}  // CEntityIndex: 0 or -1 = none, sanity cap
     uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
     uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((entIdx&0x7FFF)>>9)+16);if(!pchunk)return;
-    uintptr_t targPawn=Rd<uintptr_t>(pchunk+112*(entIdx&0x1FF));if(!targPawn){g_tbShouldFire=false;return;}
+    uintptr_t targPawn=Rd<uintptr_t>(pchunk+kEntityListStride*(entIdx&0x1FF));
+    if(!targPawn||!IsLikelyPtr(targPawn)){g_tbShouldFire=false;return;}
+    int lifeState=Rd<uint8_t>(targPawn+offsets::base_entity::m_lifeState);
+    if(lifeState!=0){g_tbShouldFire=false;return;}  // 0 = alive
     int targTeam=(int)Rd<uint8_t>(targPawn+offsets::base_entity::m_iTeamNum);
     int targHealth=Rd<int>(targPawn+offsets::base_entity::m_iHealth);
     if(targHealth<=0){g_tbShouldFire=false;return;}
     if(g_tbTeamChk&&targTeam==g_esp_local_team){g_tbShouldFire=false;return;}
     if(!g_tbShouldFire){g_tbShouldFire=true;g_tbFireTime=GetTickCount()+(DWORD)g_tbDelay;}
     if(GetTickCount()>=g_tbFireTime){
-        Wr<int>(g_client+offsets::buttons::attack,65537);
+        Wr<int>(g_client+offsets::buttons::attack,65537);  // Press
         g_tbShouldFire=false;
-        g_tbJustFired=true;  // Release on next frame
+        g_tbJustFired=true;
+        g_tbHoldFramesLeft=4;  // Hold 4 frames so game input sees it (internal processes input once per frame)
     }
 }
 
 static void ReleaseTriggerAttack(){
     if(!g_client||!g_tbEnabled)return;
+    if(g_tbJustFired && g_tbHoldFramesLeft>0){
+        Wr<int>(g_client+offsets::buttons::attack,65537);  // Keep pressed
+        g_tbHoldFramesLeft--;
+        return;
+    }
     if(g_tbJustFired){
-        Wr<int>(g_client+offsets::buttons::attack,256);
+        Wr<int>(g_client+offsets::buttons::attack,256);  // Release
         g_tbJustFired=false;
         return;
     }
-    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
-    int entIdx=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
-    bool keyHeld=(g_tbKey==0)||(GetAsyncKeyState(g_tbKey)&0x8000);
-    if(entIdx<=0||!keyHeld)Wr<int>(g_client+offsets::buttons::attack,256);
+    // Do not override user input when triggerbot is idle.
 }
 
 static void RunAimbot(){
     if(!g_aimbotEnabled||!g_client)return;
+    if(g_menuOpen) return;
     if(!(GetAsyncKeyState(g_aimbotKey)&0x8000))return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
@@ -1848,10 +1902,13 @@ static void RunAimbot(){
         float fovDist=sqrtf(dPitch*dPitch+dYaw*dYaw);
         if(fovDist<bestDist){bestDist=fovDist;bestPoint=p;found=true;}
     };
+    // Path 1: use ESP cache (filled by BuildESPData same frame)
     for(int i=0;i<g_esp_count;i++){
-        const ESPEntry&e=g_esp_players[i];if(!e.valid)continue;
+        const ESPEntry&e=g_esp_players[i];
+        if(!e.valid||!e.pawn||!IsLikelyPtr(e.pawn))continue;
         if(g_aimbotTeamChk&&e.team==g_esp_local_team)continue;
         if(e.distance>g_espMaxDist)continue;
+        UpdatePawnBones(e.pawn);
         Vec3 origin{e.origin_x,e.origin_y,e.origin_z};
         Vec3 headWorld{e.head_ox,e.head_oy,e.head_oz};
         Vec3 viewOff=headWorld-origin;
@@ -1860,23 +1917,38 @@ static void RunAimbot(){
             Vec3 bonePos{};
             int boneId = (g_aimbotBone==1) ? BONE_NECK : BONE_SPINE3;
             if(GetBonePos(e.pawn, boneId, bonePos)) aimPoint = bonePos;
-            else {
-                float boneFactor=(g_aimbotBone==1)?0.75f:0.5f;
-                aimPoint=origin+viewOff*boneFactor;
-            }
+            else { float boneFactor=(g_aimbotBone==1)?0.75f:0.5f; aimPoint=origin+viewOff*boneFactor; }
             evalPoint(aimPoint);
         }else if(g_aimbotBone==3){
             static const int bones[] = {BONE_HEAD,BONE_NECK,BONE_SPINE3,BONE_SPINE2,BONE_PELVIS};
-            bool any=false;
-            for(int b: bones){
-                Vec3 bp{};
-                if(!GetBonePos(e.pawn,b,bp)) continue;
-                evalPoint(bp);
-                any=true;
+            for(int b: bones){ Vec3 bp{}; if(GetBonePos(e.pawn,b,bp)) evalPoint(bp); }
+            if(!found) evalPoint(aimPoint);
+        }else evalPoint(aimPoint);
+    }
+    // Path 2: if no ESP entries, iterate entity list directly (like TempleWare)
+    if(!found){
+        uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
+        int localTeam=(int)Rd<uint8_t>(lp+offsets::base_entity::m_iTeamNum);
+        uintptr_t localCtrl=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerController);
+        if(entityList){
+            for(int i=1;i<64;i++){
+                uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16); if(!chunk)continue;
+                uintptr_t ctrl=Rd<uintptr_t>(chunk+kEntityListStride*(i&0x1FF)); if(!ctrl||!IsLikelyPtr(ctrl))continue;
+                if(ctrl==localCtrl)continue;  // skip self
+                if(!Rd<bool>(ctrl+offsets::controller::m_bPawnIsAlive))continue;
+                uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn); if(!ph)continue;
+                uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16); if(!pchunk)continue;
+                uintptr_t pawn=Rd<uintptr_t>(pchunk+kEntityListStride*(ph&0x1FF)); if(!pawn||!IsLikelyPtr(pawn)||pawn==lp)continue;
+                if(Rd<uint8_t>(pawn+offsets::base_entity::m_lifeState)!=0)continue;
+                if(Rd<int>(pawn+offsets::base_entity::m_iHealth)<=0)continue;
+                if(g_aimbotTeamChk && (int)Rd<uint8_t>(pawn+offsets::base_entity::m_iTeamNum)==localTeam)continue;
+                Vec3 origin=Rd<Vec3>(pawn+offsets::base_pawn::m_vOldOrigin);
+                uintptr_t scn=Rd<uintptr_t>(pawn+offsets::base_entity::m_pGameSceneNode); if(scn) origin=Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
+                Vec3 viewOff=Rd<Vec3>(pawn+offsets::base_pawn::m_vecViewOffset);
+                Vec3 head={origin.x+viewOff.x, origin.y+viewOff.y, origin.z+viewOff.z};
+                float dist=(head-localOrigin).length()/100.f; if(dist>g_espMaxDist)continue;
+                evalPoint(head);
             }
-            if(!any) evalPoint(aimPoint);
-        }else{
-            evalPoint(aimPoint);
         }
     }
     if(!found)return;
@@ -1926,7 +1998,6 @@ static bool g_bombActive=false;
 static int g_bombSite=-1;
 static Vec3 g_bombPos{};
 static float g_bombExplodeTime=0.f;
-static bool g_bombDefusing=false;
 static float g_bombDefuseEnd=0.f;
 static float g_lastBombScan=0.f;
 
@@ -2064,11 +2135,12 @@ static void DrawSoundPings(float dt){
             }
         }
         if(validCount < 3) continue;
-        for(int ring = 4; ring >= 0; ring--){
-            float rMul = 0.25f + (float)ring * 0.2f;
-            int a = (int)((80 - ring*12) * alpha);
-            if(a < 8) continue;
-            ImU32 ringCol = IM_COL32(colR, colG, colB, a);
+        // Intense glow: more rings, brighter alpha, thicker lines
+        for(int ring = 9; ring >= 0; ring--){
+            float rMul = 0.15f + (float)ring * 0.09f;
+            int a = (int)((160 - ring*10) * alpha);
+            if(a < 12) continue;
+            ImU32 ringCol = IM_COL32(colR, colG, colB, (int)Clampf((float)a, 0.f, 255.f));
             ImVec2 rPts[segs+1];
             int rCnt = 0;
             for(int i=0;i<=segs;i++){
@@ -2080,15 +2152,16 @@ static void DrawSoundPings(float dt){
                 }
             }
             if(rCnt >= 3){
-                for(int j=1;j<rCnt;j++) dl->AddLine(rPts[j-1], rPts[j], ringCol, 1.2f);
-                if(rCnt>1) dl->AddLine(rPts[rCnt-1], rPts[0], ringCol, 1.2f);
+                float thick = 1.8f + (1.f - rMul) * 1.2f;
+                for(int j=1;j<rCnt;j++) dl->AddLine(rPts[j-1], rPts[j], ringCol, thick);
+                if(rCnt>1) dl->AddLine(rPts[rCnt-1], rPts[0], ringCol, thick);
             }
         }
-        ImU32 fillCol = IM_COL32(colR, colG, colB, (int)(40*alpha));
+        ImU32 fillCol = IM_COL32(colR, colG, colB, (int)(90*alpha));
         dl->AddConvexPolyFilled(pts, validCount, fillCol);
-        ImU32 strokeCol = IM_COL32(colR, colG, colB, (int)(200*alpha));
-        for(int j=1;j<validCount;j++) dl->AddLine(pts[j-1], pts[j], strokeCol, 1.5f);
-        if(validCount>1) dl->AddLine(pts[validCount-1], pts[0], strokeCol, 1.5f);
+        ImU32 strokeCol = IM_COL32(colR, colG, colB, (int)(255*alpha));
+        for(int j=1;j<validCount;j++) dl->AddLine(pts[j-1], pts[j], strokeCol, 2.5f);
+        if(validCount>1) dl->AddLine(pts[validCount-1], pts[0], strokeCol, 2.5f);
     }
     g_soundPings.erase(std::remove_if(g_soundPings.begin(),g_soundPings.end(),[](const SoundPing& p){return p.lifetime<=0.f;}),g_soundPings.end());
 }
@@ -2132,7 +2205,7 @@ static void UpdateBombInfo(){
     float now = GetCurTime();
     if(now - g_lastBombScan < 0.2f) return;
     g_lastBombScan = now;
-    g_bombActive=false;g_bombSite=-1;g_bombExplodeTime=0.f;g_bombDefusing=false;g_bombDefuseEnd=0.f;g_bombPos={};
+    g_bombActive=false;g_bombSite=-1;g_bombExplodeTime=0.f;g_bombDefusing=false;g_bombDefuseEnd=0.f;g_bombDefuserPawn=0;g_bombPos={};
     uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
     for(int i=1;i<1024;i++){
         uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
@@ -2150,7 +2223,11 @@ static void UpdateBombInfo(){
         g_bombSite=Rd<int>(ent+offsets::planted_c4::m_nBombSite);
         g_bombExplodeTime=blow;
         g_bombDefusing=Rd<bool>(ent+offsets::planted_c4::m_bBeingDefused);
-        if(g_bombDefusing) g_bombDefuseEnd=Rd<float>(ent+offsets::planted_c4::m_flDefuseCountDown);
+        if(g_bombDefusing){
+            g_bombDefuseEnd=Rd<float>(ent+offsets::planted_c4::m_flDefuseCountDown);
+            uint32_t hDefuser=Rd<uint32_t>(ent+offsets::planted_c4::m_hBombDefuser);
+            g_bombDefuserPawn=hDefuser?ResolveHandle(entityList,hDefuser):0;
+        }
         break;
     }
 }
@@ -2854,13 +2931,7 @@ static void DrawFakeESPPreview(const ImVec2& size, int pos){
     ImU32 tCol=IM_COL32((int)(g_espTeamCol[0]*255),(int)(g_espTeamCol[1]*255),(int)(g_espTeamCol[2]*255),255);
     auto drawBox=[&](ImVec2 center,ImU32 col){
         float l=center.x-boxW*0.5f,r=center.x+boxW*0.5f,t=center.y-boxH*0.5f,b=center.y+boxH*0.5f;
-        if(g_espBoxStyle==3){
-            ImU32 accent=IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),220);
-            dl->AddRectFilled({l,t},{r,b},IM_COL32(15,15,20,180),2.f);
-            dl->AddRect({l,t},{r,b},IM_COL32(0,0,0,200),2.f,0,g_espBoxThick+1.f);
-            dl->AddRect({l,t},{r,b},col,2.f,0,g_espBoxThick);
-            dl->AddRectFilled({l,t},{r,t+3.f},accent,2.f,ImDrawFlags_RoundCornersTop);
-        }else if(g_espBoxStyle==2){
+        if(g_espBoxStyle==2){
             dl->AddRectFilled({l,t},{r,b},IM_COL32(20,20,28,120),2.f);
             DrawCornerBox(dl,l,t,r,b,col,g_espBoxThick);
         }else if(g_espBoxStyle==1){
@@ -3005,6 +3076,7 @@ static void DrawMenu(){
         PidoCombo("Bone","", &g_aimbotBone, bones, IM_ARRAYSIZE(bones));
         PidoKeybind("Aimbot key","", &g_aimbotKey);
         PidoToggle("FOV circle","", &g_fovCircleEnabled);
+        if(g_fovCircleEnabled) PidoColorEdit4("FOV color","", g_fovCircleCol);
         PidoToggle("Autostop","", &g_autostopEnabled);
         }
         PidoSection("Triggerbot");
@@ -3024,7 +3096,7 @@ static void DrawMenu(){
         PidoToggle("Enable##esp","", &g_espEnabled);
         if(g_safeMode){ ImGui::SameLine(); if(ImGui::Button("Retry##esp2")) g_safeMode=false; }
         PidoToggle("Only visible","", &g_espOnlyVis);
-        const char* boxItems[]={"Corner","Full","Corner Fill","Dark Pro","Outline","Coal","Outline Coal"};
+        const char* boxItems[]={"Corner","Full","Corner Fill","Outline","Coal","Outline Coal"};
         PidoCombo("Box","", &g_espBoxStyle, boxItems, IM_ARRAYSIZE(boxItems));
         PidoColorEdit4("Enemy","", g_espEnemyCol);
         PidoColorEdit4("Team","", g_espTeamCol);
@@ -3078,6 +3150,8 @@ static void DrawMenu(){
         ImGui::SetCursorPos({contentX, contentY});
         BeginPidoChild("##world_full", ImVec2(contentW, contentH));
         PidoSection("World");
+        PidoToggle("Sky color","", &g_skyColorEnabled);
+        if(g_skyColorEnabled) PidoColorEdit4("Sky##col","", g_skyColor);
         PidoSection("Particles");
         PidoToggle("Snow","", &g_snowEnabled);
         if(g_snowEnabled) PidoSliderInt("Density","", &g_snowDensity, 0, 2);
@@ -3176,12 +3250,26 @@ static constexpr int MAX_PARTICLES = 1500;
 
 static void UpdateAndDrawParticles(float dt,float sw,float sh){
     ImDrawList*dl=ImGui::GetBackgroundDrawList();if(!dl)return;
+    const float* vm = g_client ? reinterpret_cast<const float*>(g_client+offsets::client::dwViewMatrix) : nullptr;
+    if(g_pendingKillParticles && vm && g_killEffectEnabled){
+        ImU32 accentCol=IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),230);
+        for(int i=0;i<67 && (int)g_particles.size()<MAX_PARTICLES;i++){
+            Particle p{}; p.type=4; p.color=accentCol;
+            p.worldPos=g_lastKillEffectPos; p.is3D=true;
+            float theta=Randf(0.f,6.2831853f); float phi=Randf(0.2f,1.57f);
+            float spd=Randf(80.f,180.f); float vx=spd*sinf(phi)*cosf(theta);
+            float vy=spd*sinf(phi)*sinf(theta); float vz=Randf(40.f,120.f);
+            p.worldVel={vx,vy,vz}; p.size=Randf(1.5f,4.f); p.maxlife=Randf(1.2f,2.5f);
+            p.lifetime=p.maxlife; p.phase=Randf(0.f,6.28f); p.rot=Randf(0.f,6.28f); p.spin=Randf(-2.f,2.f);
+            g_particles.push_back(p);
+        }
+        g_pendingKillParticles=false;
+    }
     static float snowAcc=0.f,sakuraAcc=0.f,starAcc=0.f;
     int snowRate=(g_snowDensity==0?25:(g_snowDensity==1?60:120));
     if(g_snowEnabled){snowAcc+=dt*(float)snowRate;}
     if(g_sakuraEnabled){sakuraAcc+=dt*40.f;}
     if(g_starsEnabled){starAcc+=dt*12.f;}
-    const float* vm = g_client ? reinterpret_cast<const float*>(g_client+offsets::client::dwViewMatrix) : nullptr;
     bool use3D = (vm != nullptr) && g_particlesWorld && (g_esp_count > 0 || (g_localOrigin.x*g_localOrigin.x + g_localOrigin.y*g_localOrigin.y + g_localOrigin.z*g_localOrigin.z) > 100.f);
     float worldRadius = g_particlesWorldRadius;
     float worldHeight = g_particlesWorldHeight;
@@ -3201,6 +3289,8 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             p.worldVel = {0.f,0.f,0.f};
         }else if(p.type==1){
             p.worldVel = {Randf(-8.f,8.f), Randf(-8.f,8.f), Randf(-45.f,-15.f)};
+        }else if(p.type==3){
+            p.worldVel = {0.f,0.f,0.f};
         }else{
             p.worldVel = {Randf(-5.f,5.f), Randf(-5.f,5.f), Randf(-70.f,-30.f)};
         }
@@ -3219,6 +3309,7 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             p.type=type;
             if(type==0)p.color=IM_COL32(255,255,255,200);
             else if(type==1)p.color=IM_COL32((int)(g_sakuraCol[0]*255),(int)(g_sakuraCol[1]*255),(int)(g_sakuraCol[2]*255),(int)(g_sakuraCol[3]*255));
+            else if(type==3)p.color=IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),200);
             else p.color=IM_COL32(210,210,230,200);
             if(use3D){
                 p.is3D=true;
@@ -3247,22 +3338,27 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             p.worldPos.z += p.worldVel.z * dt;
             if(p.type==0){p.worldVel.z -= 8.f * dt;}
             if(p.type==1){p.worldVel.z -= 5.f * dt;}
-            if(p.type==2){/* twinkle only */}
+            if(p.type==2 || p.type==3){/* twinkle only */}
+            if(p.type==4){p.worldVel.z -= 12.f * dt;}
 
             float baseZ = g_localOrigin.z + worldFloor;
             float topZ = baseZ + worldHeight;
-            if(p.worldPos.z < baseZ){
+            if(p.type==4){
+                if(p.worldPos.z < baseZ) p.lifetime = 0.f;
+            }else if(p.worldPos.z < baseZ){
                 p.worldPos.z = topZ + Randf(0.f, worldHeight*0.15f);
                 p.worldPos.x = g_localOrigin.x;
                 p.worldPos.y = g_localOrigin.y;
                 spawnWorld(p);
             }
+            if(p.type!=4){
             float dx = p.worldPos.x - g_localOrigin.x;
             float dy = p.worldPos.y - g_localOrigin.y;
             float dist2 = dx*dx + dy*dy;
             float maxR = worldRadius * 1.35f;
             if(dist2 > maxR*maxR){
                 spawnWorld(p);
+            }
             }
         }else{
             p.x+=p.vx*dt;p.y+=p.vy*dt;
@@ -3300,6 +3396,11 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             ImU32 petal = WithAlpha(p.color, alpha*0.9f);
             DrawRotatedQuad(dl, {x,y}, size*2.2f, size*1.2f, p.rot, petal);
             DrawRotatedQuad(dl, {x,y}, size*1.4f, size*0.8f, p.rot + 0.8f, WithAlpha(p.color, alpha*0.55f));
+        }else if(p.type==4){
+            ImU32 soft = WithAlpha(p.color, alpha*0.4f);
+            ImU32 core = WithAlpha(p.color, alpha);
+            dl->AddCircleFilled({x,y},size*1.4f,soft,12);
+            dl->AddCircleFilled({x,y},size,core,12);
         }else{
             float tw = 0.4f + 0.6f * (sinf(p.phase*2.f + p.rot)*0.5f + 0.5f);
             ImU32 col = WithAlpha(p.color, alpha * tw);
@@ -3463,7 +3564,7 @@ static void DrawFovCircle(float sw, float sh){
     float radius = (std::min)(sw,sh) * 0.5f * tanf(fovRad);
     if(radius < 5.f) radius = 5.f;
     if(radius > 400.f) radius = 400.f;
-    ImU32 col = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),80);
+    ImU32 col = IM_COL32((int)(g_fovCircleCol[0]*255),(int)(g_fovCircleCol[1]*255),(int)(g_fovCircleCol[2]*255),(int)(g_fovCircleCol[3]*255));
     dl->AddCircle({cx,cy}, radius, col, 64, 1.2f);
 }
 
@@ -3550,7 +3651,7 @@ static void DrawRotatedQuad(ImDrawList* dl, ImVec2 center, float w, float h, flo
     dl->AddConvexPolyFilled(pts, 4, col);
 }
 
-static bool DrawSkeletonBones(ImDrawList*dl,const ESPEntry& e,ImU32 col){
+static bool DrawSkeletonBones(ImDrawList*dl,const ESPEntry& e,ImU32 col,ImU32 shadowCol=0){
     if(!dl||!g_client||!e.pawn) return false;
     UpdatePawnBones(e.pawn);
     const float* vm = reinterpret_cast<const float*>(g_client + offsets::client::dwViewMatrix);
@@ -3603,11 +3704,13 @@ static bool DrawSkeletonBones(ImDrawList*dl,const ESPEntry& e,ImU32 col){
     if(!(hHead && hNeck && hPel)) return false;
     bool drew=false;
     float thick = Clampf(g_skeletonThick, 0.5f, 3.5f);
+    const float shadowOff = (shadowCol != 0) ? 1.5f : 0.f;
     auto line=[&](bool ha,const Vec3& a,bool hb,const Vec3& b){
         if(!ha||!hb) return;
         float ax,ay,bx,by;
         if(WorldToScreen(vm,a,g_esp_screen_w,g_esp_screen_h,ax,ay)&&WorldToScreen(vm,b,g_esp_screen_w,g_esp_screen_h,bx,by)){
             if(!std::isfinite(ax) || !std::isfinite(ay) || !std::isfinite(bx) || !std::isfinite(by)) return;
+            if(shadowCol!=0){ dl->AddLine({ax+shadowOff,ay+shadowOff},{bx+shadowOff,by+shadowOff},shadowCol,thick+0.5f); }
             dl->AddLine({ax,ay},{bx,by},col,thick);
             drew=true;
         }
@@ -3633,14 +3736,14 @@ static bool DrawSkeletonBones(ImDrawList*dl,const ESPEntry& e,ImU32 col){
 }
 
 static void DrawESP(){
-    if(!g_espEnabled||g_esp_count<=0)return;
+    if(!g_espEnabled)return;
     ImDrawList*dl=ImGui::GetForegroundDrawList();if(!dl)return;
     const float* vm = g_client ? reinterpret_cast<const float*>(g_client+offsets::client::dwViewMatrix) : nullptr;
     uintptr_t entityList = g_client ? Rd<uintptr_t>(g_client+offsets::client::dwEntityList) : 0;
-    for(int i=0;i<g_esp_count;i++){
-        const ESPEntry&e=g_esp_players[i];if(!e.valid||e.distance>g_espMaxDist)continue;
+    auto drawOne=[&](const ESPEntry& e, float alphaMul){
+        if(!e.valid||e.distance>g_espMaxDist)return;
         bool enemy=(e.team!=g_esp_local_team);float*ecol=enemy?g_espEnemyCol:g_espTeamCol;
-        float alpha=e.visible?1.f:0.5f;float bl=e.box_l,bt2=e.box_t,br=e.box_r,bb=e.box_b;
+        float alpha=(e.visible?1.f:0.5f)*alphaMul;float bl=e.box_l,bt2=e.box_t,br=e.box_r,bb=e.box_b;
         float bw=br-bl,bh=bb-bt2,cx=(bl+br)*0.5f;
         ImU32 boxCol=IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(alpha*255));
         ImU32 dimCol=IM_COL32(160,160,170,(int)(180*alpha));
@@ -3654,13 +3757,7 @@ static void DrawESP(){
             int ga=(g==4)?50:(g==3)?35:(g==2)?20:10;
             dl->AddRect({bl-(float)g,bt2-(float)g},{br+(float)g,bb+(float)g},IM_COL32(r,g_,b,(int)(ga*alpha)),0.f,0,1.5f);
         }
-        if(g_espBoxStyle==3){
-            dl->AddRectFilled({bl,bt2},{br,bb},IM_COL32(14,14,18,(int)(120*alpha)),3.f);
-            dl->AddRect({bl,bt2},{br,bb},IM_COL32(0,0,0,(int)(220*alpha)),3.f,0,g_espBoxThick+1.0f);
-            dl->AddRect({bl,bt2},{br,bb},boxCol,3.f,0,g_espBoxThick);
-            dl->AddRectFilled({bl,bt2},{br,bt2+3.f},accent,3.f,ImDrawFlags_RoundCornersTop);
-        }
-        else if(g_espBoxStyle==0){
+        if(g_espBoxStyle==0){
             DrawCornerBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),g_espBoxThick+1.0f);
             DrawCornerBox(dl,bl,bt2,br,bb,boxCol,g_espBoxThick);
         }
@@ -3673,14 +3770,14 @@ static void DrawESP(){
             DrawCornerBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),g_espBoxThick+1.0f);
             DrawCornerBox(dl,bl,bt2,br,bb,boxCol,g_espBoxThick);
         }
-        else if(g_espBoxStyle==4){
+        else if(g_espBoxStyle==3){
             DrawOutlineBox(dl,bl,bt2,br,bb,boxCol,g_espBoxThick);
         }
-        else if(g_espBoxStyle==5){
+        else if(g_espBoxStyle==4){
             DrawCoalBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),g_espBoxThick+1.0f);
             DrawCoalBox(dl,bl,bt2,br,bb,boxCol,g_espBoxThick);
         }
-        else if(g_espBoxStyle==6){
+        else if(g_espBoxStyle==5){
             DrawOutlineCoalBox(dl,bl,bt2,br,bb,boxCol,g_espBoxThick);
         }
         if(g_espHealth&&e.health>0){
@@ -3688,14 +3785,22 @@ static void DrawESP(){
             ImU32 hbCol=HealthCol(e.health);
             if(g_espHealthStyle==1)hbCol=IM_COL32(60,200,120,(int)(220*alpha));
             if(g_espHealthStyle==2)hbCol=boxCol;
+            ImU32 c1=IM_COL32((int)(g_espHealthGradientCol1[0]*255),(int)(g_espHealthGradientCol1[1]*255),(int)(g_espHealthGradientCol1[2]*255),(int)(240*alpha));
+            ImU32 c2=IM_COL32((int)(g_espHealthGradientCol2[0]*255),(int)(g_espHealthGradientCol2[1]*255),(int)(g_espHealthGradientCol2[2]*255),(int)(240*alpha));
             ImU32 bgDark=IM_COL32(8,8,12,(int)(220*alpha));
             ImU32 borderCol=IM_COL32(40,40,50,(int)(180*alpha));
             float bx=0.f, byBar=0.f;
+            bool useGradientGlow=(g_espHealthStyle==0);
             if(g_espHealthPos==0){
                 bx=bl-barOff-barW;
                 for(int g=4;g>=1;g--){
                     float o=(float)g; int glowA=(int)(45*alpha/(float)g);
-                    dl->AddRectFilled({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
+                    if(useGradientGlow){
+                        ImU32 c1g=IM_COL32((c1>>IM_COL32_R_SHIFT)&0xFF,(c1>>IM_COL32_G_SHIFT)&0xFF,(c1>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                        ImU32 c2g=IM_COL32((c2>>IM_COL32_R_SHIFT)&0xFF,(c2>>IM_COL32_G_SHIFT)&0xFF,(c2>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                        dl->AddRectFilledMultiColor({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f}, c1g,c1g, c2g,c2g);
+                    }else
+                        dl->AddRectFilled({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
                 }
                 dl->AddRectFilled({bx-1.f,bt2-1.f},{bx+barW+1.f,bb+1.f},borderCol,barRound+1.f);
                 dl->AddRectFilled({bx,bt2},{bx+barW,bb},bgDark,barRound);
@@ -3711,7 +3816,13 @@ static void DrawESP(){
                 bx=br+barOff;
                 for(int g=4;g>=1;g--){
                     float o=(float)g; int glowA=(int)(45*alpha/(float)g);
-                    dl->AddRectFilled({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
+                    if(useGradientGlow){
+                        ImU32 c1g=IM_COL32((c1>>IM_COL32_R_SHIFT)&0xFF,(c1>>IM_COL32_G_SHIFT)&0xFF,(c1>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                        ImU32 c2g=IM_COL32((c2>>IM_COL32_R_SHIFT)&0xFF,(c2>>IM_COL32_G_SHIFT)&0xFF,(c2>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                        dl->AddRectFilledMultiColor({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f}, c1g,c1g, c2g,c2g);
+                    }
+                    else
+                        dl->AddRectFilled({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
                 }
                 dl->AddRectFilled({bx-1.f,bt2-1.f},{bx+barW+1.f,bb+1.f},borderCol,barRound+1.f);
                 dl->AddRectFilled({bx,bt2},{bx+barW,bb},bgDark,barRound);
@@ -3727,7 +3838,12 @@ static void DrawESP(){
                 float by=bt2-barOff-barW;
                 for(int g=4;g>=1;g--){
                     float o=(float)g; int glowA=(int)(45*alpha/(float)g);
-                    dl->AddRectFilled({bl-o-1.f,by-o-1.f},{br+o+1.f,by+barW+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
+                    if(useGradientGlow){
+                        ImU32 c1g=IM_COL32((c1>>IM_COL32_R_SHIFT)&0xFF,(c1>>IM_COL32_G_SHIFT)&0xFF,(c1>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                        ImU32 c2g=IM_COL32((c2>>IM_COL32_R_SHIFT)&0xFF,(c2>>IM_COL32_G_SHIFT)&0xFF,(c2>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                        dl->AddRectFilledMultiColor({bl-o-1.f,by-o-1.f},{br+o+1.f,by+barW+o+1.f}, c2g,c1g, c1g,c2g);
+                    }else
+                        dl->AddRectFilled({bl-o-1.f,by-o-1.f},{br+o+1.f,by+barW+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
                 }
                 dl->AddRectFilled({bl-1.f,by-1.f},{br+1.f,by+barW+1.f},borderCol,barRound+1.f);
                 dl->AddRectFilled({bl,by},{br,by+barW},bgDark,barRound);
@@ -3765,13 +3881,14 @@ static void DrawESP(){
         if(g_espLines){
             float sx=(float)g_esp_screen_w*0.5f,sh=(float)g_esp_screen_h;
             float sy = (g_espLineAnchor==0) ? 0.f : ((g_espLineAnchor==2) ? sh : sh*0.5f);
-            dl->AddLine({sx,sy},{e.feet_x,e.feet_y},IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(100*alpha)),0.8f);
+            int r=(int)(ecol[0]*255),g_=(int)(ecol[1]*255),b=(int)(ecol[2]*255);
+            for(int gl=3;gl>=1;gl--) dl->AddLine({sx+(float)gl,sy+(float)gl},{e.feet_x+(float)gl,e.feet_y+(float)gl},IM_COL32(0,0,0,(int)(40*alpha/(float)gl)),1.2f+(float)gl*0.3f);
+            dl->AddLine({sx,sy},{e.feet_x,e.feet_y},IM_COL32(r,g_,b,(int)(100*alpha)),0.8f);
         }
         if(g_espSkeleton){
-            ImU32 scol=(g_espBoxStyle==3)
-                ? IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(200*alpha))
-                : IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(180*alpha));
-            bool drew = DrawSkeletonBones(dl, e, scol);
+            ImU32 scol=IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(180*alpha));
+            ImU32 sShadow=IM_COL32(0,0,0,(int)(120*alpha));
+            bool drew = DrawSkeletonBones(dl, e, scol, sShadow);
             if(!drew){
                 float top=e.box_t, bottom=e.box_b, center=cx;
                 float h=bottom-top;
@@ -3797,8 +3914,11 @@ static void DrawESP(){
                 ImVec2 rKnee{center+halfHip*0.8f,kneeY};
                 ImVec2 lFoot{center-halfHip*0.7f,bottom};
                 ImVec2 rFoot{center+halfHip*0.7f,bottom};
-                dl->AddLine(head, neck, scol, 1.0f);
-                dl->AddLine(neck, pelvis, scol, 1.0f);
+                ImU32 scolShadow=IM_COL32(0,0,0,(int)(90*alpha));
+                auto skLine=[&](ImVec2 a, ImVec2 b){ for(int s=2;s>=1;s--) dl->AddLine({a.x+(float)s,a.y+(float)s},{b.x+(float)s,b.y+(float)s},scolShadow,1.8f+(float)s*0.4f); dl->AddLine(a,b,scol,1.0f); };
+                skLine(head, neck); skLine(neck, pelvis); skLine(neck, lShoulder); skLine(neck, rShoulder);
+                skLine(lShoulder, lElbow); skLine(rShoulder, rElbow); skLine(lElbow, lHand); skLine(rElbow, rHand);
+                skLine(pelvis, lHip); skLine(pelvis, rHip); skLine(lHip, lKnee); skLine(rHip, rKnee); skLine(lKnee, lFoot); skLine(rKnee, rFoot);
                 dl->AddLine(neck, lShoulder, scol, 1.0f);
                 dl->AddLine(neck, rShoulder, scol, 1.0f);
                 dl->AddLine(lShoulder, lElbow, scol, 1.0f);
@@ -3825,14 +3945,23 @@ static void DrawESP(){
             dl->AddText(font,g_espNameSize,{tx+1.f,ty+1.f},IM_COL32(0,0,0,(int)(150*alpha)),e.name);
             dl->AddText(font,g_espNameSize,{tx,ty},IM_COL32(220,220,230,(int)(alpha*255)),e.name);
         }
-        if(e.planting||e.flashed||e.scoped){
+        if(e.planting||e.flashed||e.scoped||e.defusing||e.hasBomb||e.hasKits){
             ImFont* sf = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
-            float tagY = bt2 - (g_espName&&e.name[0] ? g_espNameSize+8.f : 0.f) - 10.f;
+            float tagX = br + 8.f;  // draw status tags to the right of the box
+            float tagY = bt2;
             ImU32 tagCol = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(200*alpha));
-            float tagX = cx;
-            if(e.planting){ const char*t="[Planting]"; ImVec2 tts=sf->CalcTextSizeA(10.f,FLT_MAX,0.f,t); dl->AddText(sf,10.f,{tagX-tts.x*0.5f,tagY},tagCol,t); tagY-=12.f; }
-            if(e.flashed){ const char*t="[Flashed]"; ImVec2 tts=sf->CalcTextSizeA(10.f,FLT_MAX,0.f,t); dl->AddText(sf,10.f,{tagX-tts.x*0.5f,tagY},tagCol,t); tagY-=12.f; }
-            if(e.scoped){ const char*t="[Scoped]"; ImVec2 tts=sf->CalcTextSizeA(10.f,FLT_MAX,0.f,t); dl->AddText(sf,10.f,{tagX-tts.x*0.5f,tagY},tagCol,t); }
+            auto drawTag=[&](const char* t){
+                for(int sh=2;sh>=1;sh--) dl->AddText(sf,10.f,{tagX+(float)sh,tagY+(float)sh},IM_COL32(0,0,0,(int)(90*alpha/(float)sh)),t);
+                dl->AddText(sf,10.f,{tagX+1.f,tagY+1.f},IM_COL32(0,0,0,(int)(140*alpha)),t);
+                dl->AddText(sf,10.f,{tagX,tagY},tagCol,t);
+                tagY+=12.f;
+            };
+            if(e.planting){ drawTag("Planting"); }
+            if(e.scoped){ drawTag("Scoped"); }
+            if(e.flashed){ drawTag("Flashed"); }
+            if(e.defusing){ drawTag("Defusing"); }
+            if(e.hasBomb){ drawTag("Bomb"); }
+            if(e.hasKits){ drawTag("Kits"); }
         }
         uintptr_t weapon = 0;
         WeaponInfo winfo = WeaponInfoForId(0);
@@ -3848,24 +3977,31 @@ static void DrawESP(){
         if(g_espAmmo && weapon && winfo.maxClip > 0){
             int maxClip = winfo.maxClip;
             float frac = Clampf((float)clip / (float)maxClip, 0.f, 1.f);
-            float barH = 8.f;
+            float barH = 5.f;
             float barRound = 4.f;
             ImU32 ammoBg = IM_COL32((int)(g_espAmmoCol1[0]*255),(int)(g_espAmmoCol1[1]*255),(int)(g_espAmmoCol1[2]*255),(int)(230*alpha));
             ImU32 ammoBorder = IM_COL32(45,45,65,(int)(200*alpha));
             ImU32 ammoOuter = IM_COL32(0,0,0,(int)(180*alpha));
-            ImU32 ammoBarCol;
+            ImU32 ammoC1=IM_COL32((int)(g_espAmmoCol1[0]*255),(int)(g_espAmmoCol1[1]*255),(int)(g_espAmmoCol1[2]*255),(int)(245*alpha));
+            ImU32 ammoC2=IM_COL32((int)(g_espAmmoCol2[0]*255),(int)(g_espAmmoCol2[1]*255),(int)(g_espAmmoCol2[2]*255),(int)(245*alpha));
+            for(int g=4;g>=1;g--){
+                float o=(float)g; int glowA=(int)(45*alpha/(float)g);
+                if(g_espAmmoStyle==0){
+                    ImU32 ag1=IM_COL32((ammoC1>>IM_COL32_R_SHIFT)&0xFF,(ammoC1>>IM_COL32_G_SHIFT)&0xFF,(ammoC1>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                    ImU32 ag2=IM_COL32((ammoC2>>IM_COL32_R_SHIFT)&0xFF,(ammoC2>>IM_COL32_G_SHIFT)&0xFF,(ammoC2>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                    dl->AddRectFilledMultiColor({bl-o-1.f,belowY-o-1.f},{br+o+1.f,belowY+barH+o+1.f}, ag1,ag2, ag2,ag1);
+                }else{
+                    ImU32 ag=IM_COL32((ammoC2>>IM_COL32_R_SHIFT)&0xFF,(ammoC2>>IM_COL32_G_SHIFT)&0xFF,(ammoC2>>IM_COL32_B_SHIFT)&0xFF,glowA);
+                    dl->AddRectFilled({bl-o-1.f,belowY-o-1.f},{br+o+1.f,belowY+barH+o+1.f},ag,barRound+o);
+                }
+            }
+            dl->AddRectFilled({bl-2.f,belowY-2.f},{br+2.f,belowY+barH+2.f},ammoOuter,barRound+2.f);
+            dl->AddRectFilled({bl-1.f,belowY-1.f},{br+1.f,belowY+barH+1.f},ammoBorder,barRound+1.f);
+            dl->AddRectFilled({bl,belowY},{br,belowY+barH},ammoBg,barRound);
             if(g_espAmmoStyle==0){
-                ImU32 c1=IM_COL32((int)(g_espAmmoCol1[0]*255),(int)(g_espAmmoCol1[1]*255),(int)(g_espAmmoCol1[2]*255),(int)(245*alpha));
-                ImU32 c2=IM_COL32((int)(g_espAmmoCol2[0]*255),(int)(g_espAmmoCol2[1]*255),(int)(g_espAmmoCol2[2]*255),(int)(245*alpha));
-                dl->AddRectFilled({bl-2.f,belowY-2.f},{br+2.f,belowY+barH+2.f},ammoOuter,barRound+2.f);
-                dl->AddRectFilled({bl-1.f,belowY-1.f},{br+1.f,belowY+barH+1.f},ammoBorder,barRound+1.f);
-                dl->AddRectFilled({bl,belowY},{br,belowY+barH},ammoBg,barRound);
-                dl->AddRectFilledMultiColor({bl,belowY},{bl+bw*frac,belowY+barH}, c1,c1, c2,c2);
+                dl->AddRectFilledMultiColor({bl,belowY},{bl+bw*frac,belowY+barH}, ammoC1,ammoC2, ammoC2,ammoC1);
             }else{
-                ammoBarCol = IM_COL32((int)(g_espAmmoCol2[0]*255),(int)(g_espAmmoCol2[1]*255),(int)(g_espAmmoCol2[2]*255),(int)(245*alpha));
-                dl->AddRectFilled({bl-2.f,belowY-2.f},{br+2.f,belowY+barH+2.f},ammoOuter,barRound+2.f);
-                dl->AddRectFilled({bl-1.f,belowY-1.f},{br+1.f,belowY+barH+1.f},ammoBorder,barRound+1.f);
-                dl->AddRectFilled({bl,belowY},{br,belowY+barH},ammoBg,barRound);
+                ImU32 ammoBarCol = IM_COL32((int)(g_espAmmoCol2[0]*255),(int)(g_espAmmoCol2[1]*255),(int)(g_espAmmoCol2[2]*255),(int)(245*alpha));
                 dl->AddRectFilled({bl,belowY},{bl+bw*frac,belowY+barH},ammoBarCol,barRound);
             }
             if(frac > 0.01f && frac < 1.f) dl->AddRect({bl+bw*frac,belowY},{bl+bw*frac+0.5f,belowY+barH},IM_COL32(255,255,255,(int)(80*alpha)),0.f,0,1.f);
@@ -3934,6 +4070,17 @@ static void DrawESP(){
         if(g_espSpotted&&e.spotted){
             dl->AddCircleFilled({br+6.f,bt2+6.f},3.f,IM_COL32(90,220,130,(int)(200*alpha)));
         }
+    };
+    for(int i=0;i<g_esp_count;i++) drawOne(g_esp_players[i], 1.f);
+    bool inCur[65]={false};
+    for(int i=0;i<g_esp_count;i++) if(g_esp_players[i].ent_index>=0&&g_esp_players[i].ent_index<=64) inCur[g_esp_players[i].ent_index]=true;
+    DWORD now=GetTickCount();
+    for(int j=1;j<=64;j++){
+        if(inCur[j])continue;
+        if(!g_esp_stale[j].valid)continue;
+        if((now-g_esp_stale_tick[j])>=ESP_STALE_MS)continue;
+        float t=(float)(now-g_esp_stale_tick[j])/(float)ESP_STALE_MS;
+        drawOne(g_esp_stale[j], 1.f - t*0.35f);
     }
 }
 
@@ -3949,6 +4096,10 @@ static void DrawOofArrows(){
         ImVec2 tip{x + si*sz, y - co*sz};
         ImVec2 left{x - co*sz*c - si*sz*c, y - si*sz*c + co*sz*c};
         ImVec2 right{x + co*sz*c - si*sz*c, y + si*sz*c + co*sz*c};
+        for(int sh=2;sh>=1;sh--){
+            ImVec2 dt{(float)sh,(float)sh};
+            dl->AddTriangleFilled({tip.x+dt.x,tip.y+dt.y},{left.x+dt.x,left.y+dt.y},{right.x+dt.x,right.y+dt.y},IM_COL32(0,0,0,(int)(80/(float)sh)));
+        }
         dl->AddTriangleFilled(tip, left, right, col);
         dl->AddTriangle(tip, left, right, IM_COL32(0,0,0,180),1.5f);
     }
