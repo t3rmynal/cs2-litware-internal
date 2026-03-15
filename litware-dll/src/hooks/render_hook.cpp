@@ -81,6 +81,7 @@ static DXGI_FORMAT g_bbFormat = DXGI_FORMAT_UNKNOWN;
 static DWORD g_lastRtvFail = 0;
 static bool g_imguiInitialized = false;
 static bool g_menuOpen = false;
+static bool g_showDebugConsole = false;
 static std::atomic_bool g_unloading{false};
 static std::atomic_bool g_cleanupDone{false};
 static std::atomic_bool g_pendingUnload{false};
@@ -1536,10 +1537,11 @@ static void BuildESPData(){
         }
         if(!WorldToScreen(vm,headForward,sw,sh,hfx,hfy)){hfx=hx;hfy=hy;}
         if(!WorldToScreen(vm,origin,sw,sh,fx,fy))continue;
-        float top=(hy<fy)?hy:fy;float bot=(hy>fy)?hy:fy;float boxH=bot-top;
-        if(boxH<2.f)continue;
-        top -= boxH*0.25f; boxH *= 1.25f;  // Extend upward for full head coverage (full hitbox)
-        float boxW=boxH*0.50f;float cx=(hx+fx)*0.5f;  // Wider for full body/hitbox
+        float boxH = fy - hy;
+        float top = hy - boxH * 0.18f; // Move slightly above head head center
+        boxH = fy - top;
+        float boxW = boxH * 0.52f;
+        float cx = (hx + fx) * 0.5f;
         float dist = (origin - localOrigin).length() / 100.f;  // meters
         uintptr_t namePtr=Rd<uintptr_t>(ctrl+offsets::controller::m_sSanitizedPlayerName);
         float flashDur=Rd<float>(pawn+offsets::cs_pawn_base::m_flFlashDuration);
@@ -1547,6 +1549,10 @@ static void BuildESPData(){
         e.valid=true;e.visible=effVis;e.flashed=(flashDur>0.1f);
         e.planting=Rd<bool>(pawn+offsets::cs_pawn::m_bIsPlantingViaUse);
         e.scoped=Rd<bool>(pawn+offsets::cs_pawn::m_bIsScoped);
+        e.box_l = cx - boxW * 0.5f;
+        e.box_t = top;
+        e.box_r = cx + boxW * 0.5f;
+        e.box_b = fy;
         e.defusing=(g_bombDefusing&&g_bombDefuserPawn==pawn);
         e.hasBomb=entityList?PlayerHasWeaponId(pawn,entityList,88):false;
         e.hasKits=Rd<bool>(ctrl+offsets::controller::m_bPawnHasDefuser);
@@ -1558,7 +1564,6 @@ static void BuildESPData(){
         e.head_ox=head.x;e.head_oy=head.y;e.head_oz=head.z;
         e.origin_x=origin.x;e.origin_y=origin.y;e.origin_z=origin.z;
         e.feet_x=fx;e.feet_y=fy;
-        e.box_l=cx-boxW*0.5f;e.box_r=cx+boxW*0.5f;e.box_t=top;e.box_b=bot;
         e.health=health;e.team=team;e.distance=dist;e.yaw=0.f;
         RdName(namePtr,e.name,sizeof(e.name));
         // Stale cache: keep last-known data for anti-flicker
@@ -1910,28 +1915,42 @@ static void RunAutostop(){
 }
 
 // Bunnyhop: auto-jump when holding space. On ground=65537, in air=256 (per blast.hk/internal cheat convention)
+static void DrawDebugConsole() {
+    if (!g_showDebugConsole) return;
+    ImGui::SetNextWindowSize({ 500, 400 }, ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Debug Console", &g_showDebugConsole)) {
+        if (ImGui::Button("Clear")) ClearDebugLogs();
+        ImGui::Separator();
+        ImGui::BeginChild("LogScroll");
+        auto& logs = GetDebugLogs();
+        for (const auto& log : logs) {
+            ImGui::TextUnformatted(log.c_str());
+        }
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+            ImGui::SetScrollHereY(1.0f);
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+// Bunnyhop: auto-jump when holding space.
 static void RunBHop(){
     if(!g_bhopEnabled||!g_client)return;
-    static bool s_wasOnGround = false;
-    if(g_menuOpen){
-        Wr<int>(g_client+offsets::buttons::jump, 256);
-        return;
-    }
+    if(g_menuOpen) return;
+
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     uint32_t flags=Rd<uint32_t>(lp+offsets::base_entity::m_fFlags);
-    bool onGround = (flags & 1) != 0;  // FL_ONGROUND = bit 0
-    bool wantJump = (GetAsyncKeyState(VK_SPACE)&0x8000) != 0;
-    if(!wantJump){
-        Wr<int>(g_client+offsets::buttons::jump, 256);
-        s_wasOnGround = onGround;
-        return;
+    bool onGround = (flags & 1) != 0; 
+    
+    if(GetAsyncKeyState(VK_SPACE)&0x8000){
+        if(onGround) {
+            Wr<int>(g_client+offsets::buttons::jump, 65537);
+        } else {
+            Wr<int>(g_client+offsets::buttons::jump, 256);
+            Wr<int>(g_client+offsets::buttons::jump, 65537);
+            Wr<int>(g_client+offsets::buttons::jump, 256);
+        }
     }
-    if(onGround && !s_wasOnGround){
-        Wr<int>(g_client+offsets::buttons::jump, 65537);  // Press jump once on landing
-    }else{
-        Wr<int>(g_client+offsets::buttons::jump, 256);   // Release in air so landing registers a fresh press
-    }
-    s_wasOnGround = onGround;
 }
 
 static void RunAntiAim(){
@@ -2059,32 +2078,25 @@ static void RunStrafeHelper(){
     if(g_strafeKey!=0&&!(GetAsyncKeyState(g_strafeKey)&0x8000)) return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp) return;
     if(Rd<uint32_t>(lp+offsets::base_entity::m_fFlags)&1) return;  // On ground - no strafe
-    bool scoped=Rd<bool>(lp+offsets::cs_pawn::m_bIsScoped); if(scoped) return;  // Don't override aim when scoped
+    
     uintptr_t vaAddr=ViewAnglesAddr(); if(!vaAddr) return;
     float curYaw=Rd<float>(vaAddr+4);
-    Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
-    float speed2d=sqrtf(vel.x*vel.x+vel.y*vel.y);
-    if(speed2d < 5.f) return;
-    const float sv_airaccel=12.f;
-    float optimalTurn=15.f;
-    if(speed2d>5.f){
-        float ratio=Clampf(sv_airaccel/(speed2d+1.f),0.01f,1.f);
-        optimalTurn=2.f*57.2958f*asinf(ratio);
-        optimalTurn=Clampf(optimalTurn,2.f,25.f);
+    static float s_lastYaw = 0.f;
+    float delta = curYaw - s_lastYaw;
+    if(delta > 180.f) delta -= 360.f; else if(delta < -180.f) delta += 360.f;
+    s_lastYaw = curYaw;
+
+    if(fabsf(delta) < 0.1f) return;
+
+    if(delta > 0.f){ // Moving mouse Left (positive delta in degrees usually)
+        // Note: ViewAngles in CS2: Left is increasing degrees (0 -> 90 -> 180)
+        // If delta > 0, we are turning Left. Press 'A'.
+        Wr<int>(g_client+offsets::buttons::left, 65537);
+        Wr<int>(g_client+offsets::buttons::right, 256);
+    } else { // Moving mouse Right
+        Wr<int>(g_client+offsets::buttons::right, 65537);
+        Wr<int>(g_client+offsets::buttons::left, 256);
     }
-    bool left=(GetAsyncKeyState('A')&0x8000)!=0;
-    bool right=(GetAsyncKeyState('D')&0x8000)!=0;
-    float turnAmount=0.f;
-    if(left ^ right){
-        turnAmount = left ? -optimalTurn : optimalTurn;
-    }else{
-        float velYaw = atan2f(vel.y, vel.x) * 57.2958f;
-        float delta = AngleDiff(curYaw, velYaw);
-        turnAmount = (delta > 0.f) ? -optimalTurn : optimalTurn;
-    }
-    float newYaw=curYaw+turnAmount;
-    if(newYaw>180.f)newYaw-=360.f; else if(newYaw<-180.f)newYaw+=360.f;
-    Wr<float>(vaAddr+4,newYaw);
 }
 
 // Entity list stride (Source2: often 112/0x70; if trigger stops working after game update try 120/0x78)
@@ -2514,7 +2526,11 @@ static bool IsInputMessage(UINT msg){
 }
 
 static LRESULT CALLBACK HookWndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    if(g_imguiInitialized&&g_menuOpen){
+    if(msg == WM_KEYDOWN && wp == VK_F5) {
+        g_showDebugConsole = !g_showDebugConsole;
+        return true;
+    }
+    if(g_imguiInitialized&&(g_menuOpen || g_showDebugConsole)){
         if(ImGui_ImplWin32_WndProcHandler(hwnd,msg,wp,lp)) return true;
         if(IsInputMessage(msg)) return true;
     }
@@ -4141,48 +4157,47 @@ static void DrawESP(){
             bool useGradientGlow=(g_espHealthStyle==0);
             if(g_espHealthPos==0){
                 bx=bl-barOff-barW;
+                float fillTop = bt2+bh*(1.f-fill);
                 for(int g=4;g>=1;g--){
                     float o=(float)g; int glowA=(int)(45*alpha/(float)g);
                     if(useGradientGlow){
                         ImU32 c1g=IM_COL32((c1>>IM_COL32_R_SHIFT)&0xFF,(c1>>IM_COL32_G_SHIFT)&0xFF,(c1>>IM_COL32_B_SHIFT)&0xFF,glowA);
                         ImU32 c2g=IM_COL32((c2>>IM_COL32_R_SHIFT)&0xFF,(c2>>IM_COL32_G_SHIFT)&0xFF,(c2>>IM_COL32_B_SHIFT)&0xFF,glowA);
-                        dl->AddRectFilledMultiColor({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f}, c1g,c1g, c2g,c2g);
+                        dl->AddRectFilledMultiColor({bx-o-1.f,fillTop-o-1.f},{bx+barW+o+1.f,bb+o+1.f}, c1g,c1g, c2g,c2g);
                     }else
-                        dl->AddRectFilled({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
+                        dl->AddRectFilled({bx-o-1.f,fillTop-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
                 }
                 dl->AddRectFilled({bx-1.f,bt2-1.f},{bx+barW+1.f,bb+1.f},borderCol,barRound+1.f);
                 dl->AddRectFilled({bx,bt2},{bx+barW,bb},bgDark,barRound);
                 if(g_espHealthStyle==0){
-                    ImU32 c1=IM_COL32((int)(g_espHealthGradientCol1[0]*255),(int)(g_espHealthGradientCol1[1]*255),(int)(g_espHealthGradientCol1[2]*255),(int)(240*alpha));
-                    ImU32 c2=IM_COL32((int)(g_espHealthGradientCol2[0]*255),(int)(g_espHealthGradientCol2[1]*255),(int)(g_espHealthGradientCol2[2]*255),(int)(240*alpha));
-                    dl->AddRectFilledMultiColor({bx,bt2+bh*(1.f-fill)},{bx+barW,bb}, cFill,cFill, c2,c2);
+                    dl->AddRectFilledMultiColor({bx,fillTop},{bx+barW,bb}, cFill,cFill, c2,c2);
                 }else{
-                    dl->AddRectFilled({bx,bt2+bh*(1.f-fill)},{bx+barW,bb},hbCol,barRound);
+                    dl->AddRectFilled({bx,fillTop},{bx+barW,bb},hbCol,barRound);
                 }
-                byBar=bt2+bh*(1.f-fill);
+                byBar=fillTop;
             }else if(g_espHealthPos==2){
                 bx=br+barOff;
+                float fillTop = bt2+bh*(1.f-fill);
                 for(int g=4;g>=1;g--){
                     float o=(float)g; int glowA=(int)(45*alpha/(float)g);
                     if(useGradientGlow){
                         ImU32 c1g=IM_COL32((c1>>IM_COL32_R_SHIFT)&0xFF,(c1>>IM_COL32_G_SHIFT)&0xFF,(c1>>IM_COL32_B_SHIFT)&0xFF,glowA);
                         ImU32 c2g=IM_COL32((c2>>IM_COL32_R_SHIFT)&0xFF,(c2>>IM_COL32_G_SHIFT)&0xFF,(c2>>IM_COL32_B_SHIFT)&0xFF,glowA);
-                        dl->AddRectFilledMultiColor({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f}, c1g,c1g, c2g,c2g);
+                        dl->AddRectFilledMultiColor({bx-o-1.f,fillTop-o-1.f},{bx+barW+o+1.f,bb+o+1.f}, c1g,c1g, c2g,c2g);
                     }
                     else
-                        dl->AddRectFilled({bx-o-1.f,bt2-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
+                        dl->AddRectFilled({bx-o-1.f,fillTop-o-1.f},{bx+barW+o+1.f,bb+o+1.f},IM_COL32((hbCol>>IM_COL32_R_SHIFT)&0xFF,(hbCol>>IM_COL32_G_SHIFT)&0xFF,(hbCol>>IM_COL32_B_SHIFT)&0xFF,glowA),barRound+o);
                 }
                 dl->AddRectFilled({bx-1.f,bt2-1.f},{bx+barW+1.f,bb+1.f},borderCol,barRound+1.f);
                 dl->AddRectFilled({bx,bt2},{bx+barW,bb},bgDark,barRound);
                 if(g_espHealthStyle==0){
-                    ImU32 c1=IM_COL32((int)(g_espHealthGradientCol1[0]*255),(int)(g_espHealthGradientCol1[1]*255),(int)(g_espHealthGradientCol1[2]*255),(int)(240*alpha));
-                    ImU32 c2=IM_COL32((int)(g_espHealthGradientCol2[0]*255),(int)(g_espHealthGradientCol2[1]*255),(int)(g_espHealthGradientCol2[2]*255),(int)(240*alpha));
-                    dl->AddRectFilledMultiColor({bx,bt2+bh*(1.f-fill)},{bx+barW,bb}, cFill,cFill, c2,c2);
+                    dl->AddRectFilledMultiColor({bx,fillTop},{bx+barW,bb}, cFill,cFill, c2,c2);
                 }else{
-                    dl->AddRectFilled({bx,bt2+bh*(1.f-fill)},{bx+barW,bb},hbCol,barRound);
+                    dl->AddRectFilled({bx,fillTop},{bx+barW,bb},hbCol,barRound);
                 }
-                byBar=bt2+bh*(1.f-fill);
-            }else if(g_espHealthPos==1){
+                byBar=fillTop;
+            }
+else if(g_espHealthPos==1){
                 float by=bt2-barOff-barW;
                 for(int g=4;g>=1;g--){
                     float o=(float)g; int glowA=(int)(45*alpha/(float)g);
@@ -4718,6 +4733,7 @@ static void RenderFrame(IDXGISwapChain*sc){
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
     UpdateAndDrawParticles(io.DeltaTime, sw, sh);
     DrawMenu();
+    DrawDebugConsole();
     DrawKeybindsWindow();
     if(!g_safeMode){ DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
         DrawSoundPings(io.DeltaTime);

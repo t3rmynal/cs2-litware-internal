@@ -29,6 +29,10 @@ namespace offsets {
     namespace buttons {
         constexpr uintptr_t attack  = 0x20618F0;
         constexpr uintptr_t attack2 = 0x2061980;
+        constexpr uintptr_t forward = 0x2061A10;
+        constexpr uintptr_t back    = 0x2061AA0;
+        constexpr uintptr_t left    = 0x2061B30;
+        constexpr uintptr_t right   = 0x2061BC0;
         constexpr uintptr_t jump    = 0x2061E00;
         constexpr uintptr_t duck    = 0x2061E90;
     }
