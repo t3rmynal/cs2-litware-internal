@@ -13,6 +13,20 @@
 
 ---
 
+## Скриншоты
+
+**Меню**
+
+![LitWare Menu](screenshots/menu.jpg)
+
+**Визуалы**
+
+![Visuals Blue](screenshots/visuals_blue.jpg)
+
+![Visuals Pink](screenshots/visuals_pink.jpg)
+
+---
+
 ## Возможности
 
 | Категория | Функции |
@@ -116,6 +130,20 @@ GPL-3.0 — см. [LICENSE](LICENSE).
 | **Engine** | Source 2 |
 | **Build** | Visual Studio 2022 |
 | **Dependencies** | Steam (gameoverlayrenderer64.dll), ImGui, MinHook |
+
+---
+
+## Screenshots
+
+**Menu**
+
+![LitWare Menu](screenshots/menu.jpg)
+
+**Visuals**
+
+![Visuals Blue](screenshots/visuals_blue.jpg)
+
+![Visuals Pink](screenshots/visuals_pink.jpg)
 
 ---
 
