@@ -1,6 +1,6 @@
 # LitWare CS2 Internal
 
-## ⚠️ Still in development. Featured that are unfinished/don't work: BHOP, Skinchanher
+## ⚠️ Still in development. Features that are unfinished/don't work: BHOP, Skinchanher
 
 **Внутренний чит для Counter-Strike 2.** Инжектируется в `cs2.exe`, перехватывает DirectX 11 Present, рисует ImGui оверлей прямо в игре — без внешнего оверлея и задержки ввода.
 
