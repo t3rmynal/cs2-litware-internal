@@ -1,54 +1,99 @@
 # LitWare CS2 Internal
 
-<<<<<<< HEAD
-internal чит для cs2. инжект в cs2.exe, хукает present, рисует оверлей прямо в игре.
-=======
-## ⚠️ Still in development. Features that are unfinished/don't work: BHOP, Skinchanher
+Внутренний чит для Counter-Strike 2. Инжект в `cs2.exe`, хукает DirectX 11 Present, рисует ImGui оверлей в игре.
 
-**Внутренний чит для Counter-Strike 2.** Инжектируется в `cs2.exe`, перехватывает DirectX 11 Present, рисует ImGui оверлей прямо в игре — без внешнего оверлея и задержки ввода.
->>>>>>> 8d81a95fa5b4397435be74cc66cf370dc8a5254f
- 
 | | |
 |---|---|
-| платформа | windows x64 |
-| сборка | visual studio 2022 |
-| зависимости | steam (gameoverlayrenderer64.dll), imgui, minhook |
+| платформа | Windows x64 |
+| сборка | Visual Studio 2022 |
+| зависимости | Steam (gameoverlayrenderer64.dll), ImGui, MinHook |
 
 ---
 
-## сборка
+## Сборка
 
-открываешь `litware-dll/litware-dll.vcxproj` в студии, жмёшь билд. изи бриджи. на выходе только dll в `litware-dll/bin/Release/`.
+1. `git clone --recurse-submodules` (submodules обязательны)
+2. Открыть `litware-dll/litware-dll.vcxproj` в Visual Studio
+3. Build → Release | x64
+4. DLL: `litware-dll/bin/Release/litware-dll.dll`
 
-> submodules без которых крашит: `git clone --recurse-submodules`
+Для Electron-меню: `cd electron-menu` → `npm run dist` → `litware-menu.exe` рядом с DLL (или exe встроен в DLL при сборке).
 
 ---
 
-## управление
+## Управление
 
-| клавиша | действие |
+| Клавиша | Действие |
 |---------|----------|
-| insert | меню |
-| end | выгрузка |
+| INSERT | Меню |
+| END | Выгрузка |
 
 ---
 
-## конфиги
+## Конфиги
 
 `%APPDATA%\litware\`
 
 ---
 
-## оффсеты
+## Оффсеты
 
-`litware-dll/src/core/offsets.h`, синхронизированы с [cs2-dumper](https://github.com/a2x/cs2-dumper). после обновления игры обнови offsets.
-
----
-
-## electron меню (опционально)
-
-если нужен ui на react — собери `electron-menu` отдельно (`npm run dist`), положи `litware-menu.exe` рядом с dll. без exe dll работает как обычно, меню просто не откроется.
+`litware-dll/src/core/offsets.h` — синхронизированы с [cs2-dumper](https://github.com/a2x/cs2-dumper). После обновления игры обновляй оффсеты.
 
 ---
 
-GPL-3.0. educational only. vac баны возможны.
+## Лицензия
+
+GPL-3.0. Educational only. VAC bans possible.
+
+---
+
+---
+
+# LitWare CS2 Internal (English)
+
+Internal cheat for Counter-Strike 2. Injects into `cs2.exe`, hooks DirectX 11 Present, renders ImGui overlay in-game.
+
+| | |
+|---|---|
+| Platform | Windows x64 |
+| Build | Visual Studio 2022 |
+| Dependencies | Steam (gameoverlayrenderer64.dll), ImGui, MinHook |
+
+---
+
+## Build
+
+1. `git clone --recurse-submodules` (submodules required)
+2. Open `litware-dll/litware-dll.vcxproj` in Visual Studio
+3. Build → Release | x64
+4. Output: `litware-dll/bin/Release/litware-dll.dll`
+
+For Electron menu: `cd electron-menu` → `npm run dist` → place `litware-menu.exe` next to DLL (or exe is embedded in DLL on build).
+
+---
+
+## Controls
+
+| Key | Action |
+|-----|--------|
+| INSERT | Menu |
+| END | Unload |
+
+---
+
+## Configs
+
+`%APPDATA%\litware\`
+
+---
+
+## Offsets
+
+`litware-dll/src/core/offsets.h` — synced with [cs2-dumper](https://github.com/a2x/cs2-dumper). Update offsets after game updates.
+
+---
+
+## License
+
+GPL-3.0. Educational only. VAC bans possible.
