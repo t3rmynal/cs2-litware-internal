@@ -15,6 +15,7 @@ struct ESPEntry {
     uintptr_t pawn;
     uintptr_t controller;
     float head_x, head_y;
+    float chest_x, chest_y;  // screen midpoint head–feet (damage floaters / hitmarker anchor)
     float head_fx, head_fy;
     float head_ox, head_oy, head_oz;  // world-space head for aimbot
     float origin_x, origin_y, origin_z;

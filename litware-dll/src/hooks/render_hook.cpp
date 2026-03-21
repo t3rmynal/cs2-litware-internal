@@ -72,6 +72,7 @@ static DWORD g_lastClientHookNotify = 0;
 static DWORD g_lastBoneResolve = 0;
 static CalcWorldSpaceBonesFn g_calcWorldSpaceBones = nullptr;
 
+static IDXGISwapChain*         g_swapChain = nullptr;
 static ID3D11Device*           g_device = nullptr;
 static ID3D11DeviceContext*    g_context = nullptr;
 static ID3D11RenderTargetView* g_rtv = nullptr;
@@ -91,6 +92,7 @@ static uintptr_t g_engine2 = 0;
 static Vec3 g_localOrigin{};
 
 static bool g_espEnabled = true;
+static bool g_espDrawBox = true;
 static bool g_espOnlyVis = false;
 static int g_espBoxStyle = 4;
 static float g_espBoxThick = 1.5f;
@@ -202,6 +204,8 @@ static bool g_handsColorEnabled = false;
 static float g_handsColor[4]{0.9f,0.9f,0.95f,1.f};
 static bool g_skyColorEnabled = false;
 static float g_skyColor[4]{0.225259f,0.192963f,0.693548f,1.f};
+static bool g_skyNightMode = false;
+static float g_skyNightStrength = 0.65f;  // lerp toward dark night tint (0–1)
 static bool g_watermarkEnabled = true;
 static bool g_showFpsWatermark = true;
 static bool g_spectatorListEnabled = false;
@@ -212,6 +216,17 @@ static bool g_hitmarkerEnabled = false;
 static float g_hitmarkerDuration = 0.4f;
 static int g_hitmarkerStyle = 0;  // 0=cross 1=X
 static UINT64 g_lastHitmarkerTime = 0;
+static bool g_hitmarkerCenter = true;
+static bool g_hitmarkerWorldAtHit = false;
+static bool g_hitmarkerHitParticles = false;
+static float g_hitmarkerScreenX = 0.f, g_hitmarkerScreenY = 0.f;
+static bool g_hitmarkerHasScreenPos = false;
+static bool g_pendingHitParticles = false;
+static Vec3 g_lastHitParticlePos{};
+static bool g_damageFloatersEnabled = true;
+static float g_damageFloaterDuration = 0.85f;
+static float g_damageFloaterScale = 1.f;
+static int g_damageFloaterAnchor = 0;  // 0=head 1=chest
 static bool g_killEffectEnabled = false;
 static float g_killEffectDuration = 0.6f;
 static UINT64 g_lastKillEffectTime = 0;
@@ -240,13 +255,9 @@ static float g_menuOpacity = 0.96f;
 static float g_uiScale = 1.00f;  // Default UI scale
 static int g_activeTab = 0;  // 0-4: Aimbot, Visuals, World, Skins, Misc
 static float g_tabAnim[8] = {};
-static float g_toggleAnim[128] = {};
 static float g_tabIndicatorY = 0.f;
-static int g_toggleIdx = 0;
 static bool g_keybindsEnabled = false;
 static bool g_keybindsWindowOpen = false;
-static int g_menuTheme = 0; // 0=Dark Pro, 1=Glassmorphism, 2=Neumorphism
-static float g_themeTransition = 0.f;
 static float g_menuAnim = 0.f;
 static float g_menuAnimSpeed = 12.f;
 static UINT64 g_telegramNoteStart = 0;  // Telegram notice: 5s on load
@@ -272,56 +283,6 @@ using RegenerateWeaponSkinsFn = void(*)();
 static RegenerateWeaponSkinsFn g_regenSkins = nullptr;
 static bool g_regenSkinsReady = false;
 
-struct ThemeColors {
-    ImU32 bg, surf, surf2, border;
-    ImU32 text, textDim;
-    ImU32 toggleBg, toggleFill;
-    ImU32 headerBg;
-    float round;
-};
-
-static ThemeColors GetThemeColors() {
-    ThemeColors c{};
-    float acc_r = g_accentColor[0], acc_g = g_accentColor[1], acc_b = g_accentColor[2];
-    float pulseIntensity = 0.8f + sinf((float)ImGui::GetTime() * 1.5f) * 0.2f;
-
-    if(g_menuTheme == 1) {
-        c.bg = IM_COL32(12, 12, 22, 210);
-        c.surf = IM_COL32(22, 22, 38, 195);
-        c.surf2 = IM_COL32(32, 32, 52, 185);
-        c.border = IM_COL32((int)(acc_r*220*pulseIntensity),(int)(acc_g*220*pulseIntensity),(int)(acc_b*220*pulseIntensity),150);
-        c.text = IM_COL32(245, 248, 252, 255);
-        c.textDim = IM_COL32(165, 175, 195, 210);
-        c.toggleBg = IM_COL32(28, 28, 48, 160);
-        c.toggleFill = IM_COL32((int)(acc_r*255),(int)(acc_g*255),(int)(acc_b*255),240);
-        c.headerBg = IM_COL32(22, 22, 38, 220);
-        c.round = 18.f;
-    } else if(g_menuTheme == 2) {
-        c.bg = IM_COL32(48, 53, 63, 255);
-        c.surf = IM_COL32(58, 63, 73, 255);
-        c.surf2 = IM_COL32(53, 58, 68, 255);
-        c.border = IM_COL32(35, 40, 50, 120);
-        c.text = IM_COL32(215, 225, 235, 255);
-        c.textDim = IM_COL32(135, 145, 165, 210);
-        c.toggleBg = IM_COL32(53, 58, 68, 255);
-        c.toggleFill = IM_COL32((int)(acc_r*230),(int)(acc_g*230),(int)(acc_b*230),220);
-        c.headerBg = IM_COL32(48, 53, 63, 255);
-        c.round = 14.f;
-    } else {
-        c.bg = IM_COL32(10, 10, 14, 255);
-        c.surf = IM_COL32(18, 18, 26, 255);
-        c.surf2 = IM_COL32(24, 24, 34, 255);
-        c.border = IM_COL32((int)(50+acc_r*20), (int)(50+acc_g*20), (int)(70+acc_b*20), 220);
-        c.text = IM_COL32(225, 225, 235, 255);
-        c.textDim = IM_COL32(145, 145, 165, 255);
-        c.toggleBg = IM_COL32(33, 33, 48, 220);
-        c.toggleFill = IM_COL32((int)(acc_r*255),(int)(acc_g*255),(int)(acc_b*255),255);
-        c.headerBg = IM_COL32(18, 18, 26, 255);
-        c.round = 10.f;
-    }
-    return c;
-}
-
 struct PidoraisePalette {
     ImU32 bgFill;
     ImU32 bgStroke;
@@ -336,6 +297,14 @@ struct PidoraisePalette {
 };
 
 static PidoraisePalette g_pido;
+struct SkeetUiMetrics {
+    float childRounding = 6.0f;
+    float rowHeight = 28.0f;
+    float sectionHeight = 22.0f;
+    float tabHeight = 56.0f;
+    float sliderTrackH = 2.5f;
+};
+static SkeetUiMetrics g_skeetUi;
 
 static inline float Clampf(float v, float lo, float hi);
 template<typename T> static inline T Rd(uintptr_t addr);
@@ -344,44 +313,20 @@ static void DrawRotatedQuad(ImDrawList* dl, ImVec2 center, float w, float h, flo
 
 static void UpdatePidoraisePalette(float fade = 1.f) {
     float opacity = Clampf(g_menuOpacity, 0.f, 1.f) * Clampf(fade, 0.f, 1.f);
-    int bgA = (int)(opacity * 255.f);
-    int elemA = (int)(opacity * 235.f);
-    int tabA = (int)(opacity * 245.f);
-    int textA = (int)(Clampf(fade, 0.f, 1.f) * 255.f);
-    int accA = (int)(Clampf(fade, 0.f, 1.f) * 255.f);
-    g_pido.accent = IM_COL32((int)(g_accentColor[0]*255.f),(int)(g_accentColor[1]*255.f),(int)(g_accentColor[2]*255.f),accA);
-
-    if(g_menuTheme == 1){ // Glassmorphism
-        g_pido.bgFill = IM_COL32(12,14,22,bgA);
-        g_pido.bgStroke = IM_COL32((int)(g_accentColor[0]*220.f),(int)(g_accentColor[1]*220.f),(int)(g_accentColor[2]*220.f),(int)(140.f*fade));
-        g_pido.tabBg = IM_COL32(16,18,28,tabA);
-        g_pido.tabActive = IM_COL32(22,24,36,(int)(220.f*fade));
-        g_pido.elemBg = IM_COL32(20,22,32,elemA);
-        g_pido.elemStroke = IM_COL32(40,44,58,(int)(120.f*fade));
-        g_pido.text = IM_COL32(235,242,252,textA);
-        g_pido.textDim = IM_COL32(160,170,190,(int)(textA*0.8f));
-        g_pido.textActive = IM_COL32(255,255,255,textA);
-    }else if(g_menuTheme == 2){ // Neumorphism
-        g_pido.bgFill = IM_COL32(50,56,66,(int)(opacity*255.f));
-        g_pido.bgStroke = IM_COL32(35,40,50,(int)(160.f*fade));
-        g_pido.tabBg = IM_COL32(54,60,70,(int)(opacity*255.f));
-        g_pido.tabActive = IM_COL32(60,66,78,(int)(opacity*255.f));
-        g_pido.elemBg = IM_COL32(56,62,72,(int)(opacity*255.f));
-        g_pido.elemStroke = IM_COL32(30,34,42,(int)(120.f*fade));
-        g_pido.text = IM_COL32(215,225,235,textA);
-        g_pido.textDim = IM_COL32(140,150,170,(int)(textA*0.8f));
-        g_pido.textActive = IM_COL32(235,240,250,textA);
-    }else{ // Dark Pro
-        g_pido.bgFill = IM_COL32(11,11,11,bgA);
-        g_pido.bgStroke = IM_COL32(24,26,36,(int)(220.f*fade));
-        g_pido.tabBg = IM_COL32(14,14,15,tabA);
-        g_pido.tabActive = IM_COL32(20,20,21,(int)(255.f*fade));
-        g_pido.elemBg = IM_COL32(11,13,15,elemA);
-        g_pido.elemStroke = IM_COL32(28,26,37,(int)(220.f*fade));
-        g_pido.text = IM_COL32(205,210,220,textA);
-        g_pido.textDim = IM_COL32(125,125,135,(int)(textA*0.85f));
-        g_pido.textActive = IM_COL32(255,255,255,textA);
-    }
+    int bgA  = (int)(opacity * 252.f);
+    int elemA= (int)(opacity * 245.f);
+    int textA= (int)(Clampf(fade, 0.f, 1.f) * 255.f);
+    int accA = textA;
+    g_pido.accent     = IM_COL32(215, 215, 225, accA);
+    g_pido.bgFill     = IM_COL32(8, 9, 12, bgA);
+    g_pido.bgStroke   = IM_COL32(215, 215, 225, (int)(120.f*fade));
+    g_pido.tabBg      = IM_COL32(6, 7, 10, bgA);
+    g_pido.tabActive  = IM_COL32(16, 16, 22, (int)(250.f*fade));
+    g_pido.elemBg     = IM_COL32(11, 12, 16, elemA);
+    g_pido.elemStroke = IM_COL32(45, 46, 60, (int)(180.f*fade));
+    g_pido.text       = IM_COL32(200, 200, 210, textA);
+    g_pido.textDim    = IM_COL32(90, 92, 108, textA);
+    g_pido.textActive = IM_COL32(230, 230, 240, textA);
 }
 
 static char g_configName[64] = "default";
@@ -393,6 +338,8 @@ static bool g_seenThisFrame[ESP_MAX_PLAYERS + 1] = {};
 
 struct LogEntry{char text[256];ImU32 color;float lifetime,maxlife;int type;};  // type: 0=hit 1=kill
 static std::deque<LogEntry>g_logs;
+struct DamageFloater{ int damage; UINT64 spawnMs; float ax, ay; float duration; };
+static std::deque<DamageFloater> g_damageFloaters;
 static DWORD g_lastSoundPingTick[ESP_MAX_PLAYERS + 1] = {};
 static bool g_visMap[ESP_MAX_PLAYERS + 1] = {};
 // Anti-flicker: stale cache keeps drawing entities for 80ms after they disappear; visibility hysteresis
@@ -451,6 +398,9 @@ static Vec2 CalcAngle(Vec3 from,Vec3 to){
 
 static ImU32 HealthCol(int hp);
 static void DrawCornerBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick);
+static void DrawCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick);
+static void DrawOutlineBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick);
+static void DrawOutlineCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick);
 static void PushNotification(const char*text,ImU32 color);
 static void PushLog(const char* text, ImU32 color);
 static void PlayHitSound(int type);
@@ -978,6 +928,7 @@ static bool ParseSkinOverride(const std::string& v, SkinOverride& out){
 // Config load helpers ? split to avoid MSVC "invalid nesting of blocks"
 static bool LoadConfigKeyEsp(const std::string& key, const std::string& val, bool& ok){
     if(key=="esp_enabled"){ g_espEnabled=ParseBool(val); return true; }
+    if(key=="esp_draw_box"){ g_espDrawBox=ParseBool(val); return true; }
     if(key=="esp_only_vis"){ g_espOnlyVis=ParseBool(val); return true; }
     if(key=="esp_box_style"){ int v; if(ParseInt(val,v)) g_espBoxStyle=v; else ok=false; return true; }
     if(key=="esp_box_thick"){ float v; if(ParseFloat(val,v)) g_espBoxThick=v; else ok=false; return true; }
@@ -1087,6 +1038,12 @@ static bool LoadConfigKeyVisual(const std::string& key, const std::string& val, 
     if(key=="particles_depth_fade"){ float v; if(ParseFloat(val,v)) g_particlesDepthFade=v; else ok=false; return true; }
     if(key=="sky_color_enabled"){ g_skyColorEnabled=ParseBool(val); return true; }
     if(key=="sky_color"){ if(!ParseColor4(val,g_skyColor)) ok=false; return true; }
+    if(key=="sky_night_mode"){ g_skyNightMode=ParseBool(val); return true; }
+    if(key=="sky_night_strength"){ float v; if(ParseFloat(val,v)) g_skyNightStrength=v; else ok=false; return true; }
+    if(key=="damage_floaters"){ g_damageFloatersEnabled=ParseBool(val); return true; }
+    if(key=="damage_floater_duration"){ float v; if(ParseFloat(val,v)) g_damageFloaterDuration=v; else ok=false; return true; }
+    if(key=="damage_floater_scale"){ float v; if(ParseFloat(val,v)) g_damageFloaterScale=v; else ok=false; return true; }
+    if(key=="damage_floater_anchor"){ int v; if(ParseInt(val,v)) g_damageFloaterAnchor=v; else ok=false; return true; }
     return false;
 }
 static bool LoadConfigKeySkins(const std::string& key, const std::string& val, bool& ok){
@@ -1111,6 +1068,12 @@ static bool LoadConfigKeyMisc(const std::string& key, const std::string& val, bo
         if(key=="keybinds_enabled"){ g_keybindsEnabled=ParseBool(val); return true; }
     if(key=="hit_notif"){ g_hitNotifEnabled=ParseBool(val); return true; }
     if(key=="kill_notif"){ g_killNotifEnabled=ParseBool(val); return true; }
+    if(key=="hitmarker"){ g_hitmarkerEnabled=ParseBool(val); return true; }
+    if(key=="hitmarker_duration"){ float v; if(ParseFloat(val,v)) g_hitmarkerDuration=v; else ok=false; return true; }
+    if(key=="hitmarker_style"){ int v; if(ParseInt(val,v)) g_hitmarkerStyle=v; else ok=false; return true; }
+    if(key=="hitmarker_center"){ g_hitmarkerCenter=ParseBool(val); return true; }
+    if(key=="hitmarker_world"){ g_hitmarkerWorldAtHit=ParseBool(val); return true; }
+    if(key=="hitmarker_particles"){ g_hitmarkerHitParticles=ParseBool(val); return true; }
     if(key=="hit_sound"){ g_hitSoundEnabled=ParseBool(val); return true; }
     if(key=="hit_sound_type"){ int v; if(ParseInt(val,v)) g_hitSoundType=v; else ok=false; return true; }
     if(key=="radar"){ g_radarEnabled=ParseBool(val); return true; }
@@ -1129,13 +1092,13 @@ static bool LoadConfigKeyMisc(const std::string& key, const std::string& val, bo
     if(key=="accent"){ if(!ParseColor4(val,g_accentColor)) ok=false; return true; }
     if(key=="menu_opacity"){ float v; if(ParseFloat(val,v)) g_menuOpacity=v; else ok=false; return true; }
     if(key=="ui_scale"){ float v; if(ParseFloat(val,v)) g_uiScale=v; else ok=false; return true; }
-    if(key=="menu_theme"){ int v; if(ParseInt(val,v)) g_menuTheme=v; else ok=false; return true; }
     if(key=="menu_anim_speed"){ float v; if(ParseFloat(val,v)) g_menuAnimSpeed=v; else ok=false; return true; }
     return false;
 }
 
 static void ApplyDefaults(){
     g_espEnabled = true;
+    g_espDrawBox = true;
     g_espOnlyVis = false;
     g_espBoxStyle = 0;
     g_espBoxThick = 1.5f;
@@ -1230,6 +1193,12 @@ static void ApplyDefaults(){
     g_particlesDepthFade = 0.0022f;
     g_skyColorEnabled = false;
     g_skyColor[0]=0.4f; g_skyColor[1]=0.5f; g_skyColor[2]=0.8f; g_skyColor[3]=1.f;
+    g_skyNightMode = false;
+    g_skyNightStrength = 0.65f;
+    g_damageFloatersEnabled = true;
+    g_damageFloaterDuration = 0.85f;
+    g_damageFloaterScale = 1.f;
+    g_damageFloaterAnchor = 0;
     g_handsColorEnabled = false;
     g_handsColor[0]=0.9f; g_handsColor[1]=0.9f; g_handsColor[2]=0.95f; g_handsColor[3]=1.f;
     g_watermarkEnabled = true;
@@ -1238,6 +1207,12 @@ static void ApplyDefaults(){
     g_keybindsEnabled = true;
     g_hitNotifEnabled = true;
     g_killNotifEnabled = true;
+    g_hitmarkerEnabled = false;
+    g_hitmarkerDuration = 0.4f;
+    g_hitmarkerStyle = 0;
+    g_hitmarkerCenter = true;
+    g_hitmarkerWorldAtHit = false;
+    g_hitmarkerHitParticles = false;
     g_hitSoundEnabled = false;
     g_hitSoundType = 1;
     g_radarEnabled = true;
@@ -1256,7 +1231,6 @@ static void ApplyDefaults(){
     g_accentColor[0]=0.1f; g_accentColor[1]=0.55f; g_accentColor[2]=1.0f; g_accentColor[3]=1.0f;
     g_menuOpacity = 1.0f;
     g_uiScale = 1.10f;
-    g_menuTheme = 0;
     g_menuAnimSpeed = 12.f;
     g_skinEnabled = false;
     g_skinActiveOnly = false;
@@ -1274,6 +1248,7 @@ static bool SaveConfig(const char* name){
     std::ofstream out(ConfigPath(name), std::ios::trunc);
     if(!out.is_open()) return false;
     WriteBool(out, "esp_enabled", g_espEnabled);
+    WriteBool(out, "esp_draw_box", g_espDrawBox);
     WriteBool(out, "esp_only_vis", g_espOnlyVis);
     WriteInt(out, "esp_box_style", g_espBoxStyle);
     WriteFloat(out, "esp_box_thick", g_espBoxThick);
@@ -1371,12 +1346,24 @@ static bool SaveConfig(const char* name){
     WriteFloat(out, "particles_depth_fade", g_particlesDepthFade);
     WriteBool(out, "sky_color_enabled", g_skyColorEnabled);
     WriteColor(out, "sky_color", g_skyColor);
+    WriteBool(out, "sky_night_mode", g_skyNightMode);
+    WriteFloat(out, "sky_night_strength", g_skyNightStrength);
+    WriteBool(out, "damage_floaters", g_damageFloatersEnabled);
+    WriteFloat(out, "damage_floater_duration", g_damageFloaterDuration);
+    WriteFloat(out, "damage_floater_scale", g_damageFloaterScale);
+    WriteInt(out, "damage_floater_anchor", g_damageFloaterAnchor);
     WriteBool(out, "watermark", g_watermarkEnabled);
     WriteBool(out, "watermark_fps", g_showFpsWatermark);
     WriteBool(out, "spectator_list", g_spectatorListEnabled);
     WriteBool(out, "keybinds_enabled", g_keybindsEnabled);
     WriteBool(out, "hit_notif", g_hitNotifEnabled);
     WriteBool(out, "kill_notif", g_killNotifEnabled);
+    WriteBool(out, "hitmarker", g_hitmarkerEnabled);
+    WriteFloat(out, "hitmarker_duration", g_hitmarkerDuration);
+    WriteInt(out, "hitmarker_style", g_hitmarkerStyle);
+    WriteBool(out, "hitmarker_center", g_hitmarkerCenter);
+    WriteBool(out, "hitmarker_world", g_hitmarkerWorldAtHit);
+    WriteBool(out, "hitmarker_particles", g_hitmarkerHitParticles);
     WriteBool(out, "hit_sound", g_hitSoundEnabled);
     WriteInt(out, "hit_sound_type", g_hitSoundType);
     WriteBool(out, "radar", g_radarEnabled);
@@ -1395,7 +1382,6 @@ static bool SaveConfig(const char* name){
     WriteColor(out, "accent", g_accentColor);
     WriteFloat(out, "menu_opacity", g_menuOpacity);
     WriteFloat(out, "ui_scale", g_uiScale);
-    WriteInt(out, "menu_theme", g_menuTheme);
     WriteFloat(out, "menu_anim_speed", g_menuAnimSpeed);
     WriteBool(out, "skin_enabled", g_skinEnabled);
     WriteBool(out, "skin_active_only", g_skinActiveOnly);
@@ -1433,8 +1419,6 @@ static bool LoadConfig(const char* name){
     g_menuOpacity = Clampf(g_menuOpacity, 0.3f, 1.0f);
     g_uiScale = Clampf(g_uiScale, 0.85f, 1.6f);
     g_menuAnimSpeed = Clampf(g_menuAnimSpeed, 2.f, 30.f);
-    if(g_menuTheme < 0) g_menuTheme = 0;
-    if(g_menuTheme > 2) g_menuTheme = 2;
     g_glowAlpha = Clampf(g_glowAlpha, 0.f, 1.f);
     g_skeletonThick = Clampf(g_skeletonThick, 0.5f, 3.5f);
     g_espOofSize = Clampf(g_espOofSize, 8.f, 64.f);
@@ -1443,6 +1427,13 @@ static bool LoadConfig(const char* name){
     g_particlesWorldFloor = Clampf(g_particlesWorldFloor, -200.f, 400.f);
     g_particlesWind = Clampf(g_particlesWind, 0.f, 60.f);
     g_particlesDepthFade = Clampf(g_particlesDepthFade, 0.0005f, 0.01f);
+    g_skyNightStrength = Clampf(g_skyNightStrength, 0.f, 1.f);
+    g_damageFloaterDuration = Clampf(g_damageFloaterDuration, 0.25f, 2.5f);
+    g_damageFloaterScale = Clampf(g_damageFloaterScale, 0.4f, 2.5f);
+    g_damageFloaterAnchor &= 1;
+    g_hitmarkerDuration = Clampf(g_hitmarkerDuration, 0.1f, 2.5f);
+    if(g_hitmarkerStyle < 0) g_hitmarkerStyle = 0;
+    if(g_hitmarkerStyle > 1) g_hitmarkerStyle = 1;
     g_soundPuddleScale = Clampf(g_soundPuddleScale, 0.3f, 3.0f);
     g_soundPuddleAlpha = Clampf(g_soundPuddleAlpha, 0.f, 2.0f);
     return ok;
@@ -1555,7 +1546,9 @@ static void BuildESPData(){
         e.ent_index=i;
         e.pawn=pawn;
         e.controller=ctrl;
-        e.head_x=hx;e.head_y=hy;e.head_fx=hfx;e.head_fy=hfy;
+        e.head_x=hx;e.head_y=hy;
+        e.chest_x=(hx+fx)*0.5f;e.chest_y=(hy+fy)*0.5f;
+        e.head_fx=hfx;e.head_fy=hfy;
         e.head_ox=head.x;e.head_oy=head.y;e.head_oz=head.z;
         e.origin_x=origin.x;e.origin_y=origin.y;e.origin_z=origin.z;
         e.feet_x=fx;e.feet_y=fy;
@@ -1635,6 +1628,32 @@ static void BuildSpectatorList(){
     }
 }
 
+// Match watermark: outer fill + double stroke + thin top color strip (do not use for DrawWatermark itself).
+static void DrawOverlayWatermarkChrome(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float round){
+    const ImU32 colBg = IM_COL32(16,16,16,245);
+    const ImU32 colBorder = IM_COL32(64,64,64,220);
+    const ImU32 colInner = IM_COL32(8,8,8,210);
+    dl->AddRectFilled(p0, p1, colBg, round);
+    dl->AddRect(p0, p1, colBorder, round, 0, 1.f);
+    dl->AddRect({p0.x+1.f,p0.y+1.f},{p1.x-1.f,p1.y-1.f}, colInner, round, 0, 1.f);
+    float stripH = (std::min)(3.f, (p1.y - p0.y) * 0.22f);
+    if(stripH < 1.2f) return;
+    float gx0 = p0.x + 2.f;
+    float gy0 = p0.y + 1.f;
+    float gy1 = p0.y + stripH;
+    float gq1 = p0.x + (p1.x - p0.x) * 0.33f;
+    float gq2 = p0.x + (p1.x - p0.x) * 0.66f;
+    float gx1 = p1.x - 2.f;
+    if(gy1 > p0.y + round * 0.45f) gy1 = p0.y + round * 0.45f;
+    if(gy1 <= gy0) return;
+    dl->AddRectFilledMultiColor({gx0,gy0},{gq1,gy1},
+        IM_COL32(108,132,188,220), IM_COL32(174,122,190,220), IM_COL32(174,122,190,220), IM_COL32(108,132,188,220));
+    dl->AddRectFilledMultiColor({gq1,gy0},{gq2,gy1},
+        IM_COL32(174,122,190,220), IM_COL32(194,166,118,220), IM_COL32(194,166,118,220), IM_COL32(174,122,190,220));
+    dl->AddRectFilledMultiColor({gq2,gy0},{gx1,gy1},
+        IM_COL32(194,166,118,220), IM_COL32(116,168,148,220), IM_COL32(116,168,148,220), IM_COL32(194,166,118,220));
+}
+
 static void DrawSpectatorList(float sw){
     if(!g_spectatorListEnabled) return;
     if(g_spectatorCount == 0 && !g_weAreSpectating) return;
@@ -1655,9 +1674,6 @@ static void DrawSpectatorList(float sw){
         yBase += 34.f + 8.f;
     }
 
-    const ImU32 colBg      = IM_COL32(10, 10, 12, 245);
-    const ImU32 colBorder  = IM_COL32(38, 38, 48, 255);
-    const ImU32 colHeader  = IM_COL32(16, 16, 20, 255);
     const ImU32 colAccent  = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),255);
     const ImU32 colAccentD = IM_COL32((int)(g_accentColor[0]*160),(int)(g_accentColor[1]*160),(int)(g_accentColor[2]*160),255);
     const ImU32 colText    = IM_COL32(215, 220, 230, 255);
@@ -1675,9 +1691,7 @@ static void DrawSpectatorList(float sw){
         float pillH = headerH;
         float px = sw - pillW - margin;
         float py = yBase;
-        dl->AddRectFilled({px, py}, {px+pillW, py+pillH}, colBg, rnd);
-        dl->AddRect({px, py}, {px+pillW, py+pillH}, colBorder, rnd, 0, 1.f);
-        // accent left bar
+        DrawOverlayWatermarkChrome(dl, {px, py}, {px+pillW, py+pillH}, rnd);
         dl->AddRectFilled({px, py+4.f}, {px+2.f, py+pillH-4.f}, colAccent, 2.f);
         float midY = py + pillH * 0.5f;
         dl->AddText(fBold, fBold->LegacySize, {px+padX, midY - szPrefix.y*0.5f}, colAccent, prefix);
@@ -1709,23 +1723,10 @@ static void DrawSpectatorList(float sw){
     float x = sw - boxW - margin;
     float y = yBase;
 
-    // Shadow
     dl->AddRectFilled({x-3.f, y-3.f}, {x+boxW+3.f, y+boxH+3.f}, IM_COL32(0,0,0,55), rnd+2.f);
-
-    // Main background
-    dl->AddRectFilled({x, y}, {x+boxW, y+boxH}, colBg, rnd);
-
-    // Header background
-    dl->AddRectFilled({x, y}, {x+boxW, y+headerH}, colHeader,
-        rnd, ImDrawFlags_RoundCornersTop);
-
-    // Separator under header
-    dl->AddLine({x+1.f, y+headerH}, {x+boxW-1.f, y+headerH}, colSep, 1.f);
-
-    // Border
-    dl->AddRect({x, y}, {x+boxW, y+boxH}, colBorder, rnd, 0, 1.f);
-
-    // Accent left bar
+    DrawOverlayWatermarkChrome(dl, {x, y}, {x+boxW, y+boxH}, rnd);
+    dl->AddRectFilled({x+1.f, y+1.f}, {x+boxW-1.f, y+headerH}, IM_COL32(10,10,14,140), rnd, ImDrawFlags_RoundCornersTop);
+    dl->AddLine({x+2.f, y+headerH}, {x+boxW-2.f, y+headerH}, colSep, 1.f);
     dl->AddRectFilled({x, y+4.f}, {x+2.f, y+boxH-4.f}, colAccent, 2.f);
 
     // Header text
@@ -1767,13 +1768,38 @@ static void ProcessHitEvents(){
         g_seenThisFrame[e.ent_index] = true;
         int prev = g_lastHealth[e.ent_index];
         if(prev > 0 && e.health < prev){
+            int dmg = prev - e.health;
             char buf[256];
-            std::snprintf(buf,sizeof(buf),"Hit %s for %d", e.name[0]?e.name:"Enemy", (prev - e.health));
+            std::snprintf(buf,sizeof(buf),"Hit %s for %d", e.name[0]?e.name:"Enemy", dmg);
             if(g_hitNotifEnabled) PushNotification(buf, IM_COL32(240,180,60,255));
             LogEntry le{}; std::snprintf(le.text,sizeof(le.text),"%s",buf); le.color=IM_COL32(240,180,60,255); le.maxlife=4.f; le.lifetime=4.f; le.type=0;
             g_logs.push_back(le); if(g_logs.size()>8)g_logs.pop_front();
             PlayHitSound(g_hitSoundType);
-            if(g_hitmarkerEnabled) g_lastHitmarkerTime = GetTickCount64();
+            if(g_hitmarkerHitParticles){
+                g_lastHitParticlePos = {e.head_ox, e.head_oy, e.head_oz};
+                g_pendingHitParticles = true;
+            }
+            if(g_hitmarkerEnabled){
+                g_lastHitmarkerTime = GetTickCount64();
+                float ax = (g_damageFloaterAnchor == 1) ? e.chest_x : e.head_x;
+                float ay = (g_damageFloaterAnchor == 1) ? e.chest_y : e.head_y;
+                g_hitmarkerScreenX = ax;
+                g_hitmarkerScreenY = ay;
+                g_hitmarkerHasScreenPos = std::isfinite(ax) && std::isfinite(ay);
+            }
+            if(g_damageFloatersEnabled){
+                DamageFloater df{};
+                df.damage = dmg;
+                df.spawnMs = GetTickCount64();
+                df.ax = (g_damageFloaterAnchor == 1) ? e.chest_x : e.head_x;
+                df.ay = (g_damageFloaterAnchor == 1) ? e.chest_y : e.head_y;
+                df.duration = g_damageFloaterDuration;
+                UINT64 j = GetTickCount64() ^ (UINT64)(uintptr_t)e.pawn ^ ((UINT64)e.ent_index << 17);
+                df.ax += ((j & 0xFFF) / 4095.f) * 12.f - 6.f;
+                df.ay += (((j >> 12) & 0xFFF) / 4095.f) * 14.f - 10.f;
+                g_damageFloaters.push_back(df);
+                while(g_damageFloaters.size() > 32) g_damageFloaters.pop_front();
+            }
         }
         if(prev > 0 && e.health <= 0){
             char buf[256];
@@ -2123,12 +2149,14 @@ static void RunThirdPerson(){
                     Wr<uint8_t>(obs+offsets::observer::m_iObserverMode, 0);
                 }
             }
-            uintptr_t camSvc = Rd<uintptr_t>(lp + offsets::base_pawn::m_pCameraServices);
-            if(camSvc && camSvc > 0x10000 && camSvc < 0x7FFFFFFFFFFF){
-                if(allowThird){
-                    float yaw=Rd<float>(vaAddr+4);
-                    Wr<float>(camSvc + offsets::camera::m_thirdPersonHeading, yaw);
-                }
+            if(allowThird){
+                float pitch=Rd<float>(vaAddr);
+                float yaw=Rd<float>(vaAddr+4);
+                float pitchOffset = (g_tpHeightOffset / 100.f) * 8.f;
+                uintptr_t h = lp + offsets::cs_pawn::m_thirdPersonHeading; // QAngle on pawn
+                Wr<float>(h, pitch - pitchOffset);
+                Wr<float>(h + 4, yaw);
+                Wr<float>(h + 8, 0.f);
             }
         }__except(EXCEPTION_EXECUTE_HANDLER){}
     }__except(EXCEPTION_EXECUTE_HANDLER){}
@@ -2594,20 +2622,36 @@ static void DrawBombTimer(float sw){
     float tLeft = g_bombExplodeTime - now;
     if(tLeft <= 0.f) return;  // bomb exploded, hide timer
     if(tLeft > 42.f) return;  // invalid/stale data (bomb is 40s max)
-    char buf[128];
+    char tail[96];
     if(g_bombDefusing){
         float dLeft = g_bombDefuseEnd - now;
         if(dLeft < 0.f) dLeft = 0.f;
-        std::snprintf(buf,sizeof(buf),"Bomb %c | %.1fs | Defuse %.1fs", g_bombSite==1?'B':'A', tLeft, dLeft);
+        std::snprintf(tail,sizeof(tail)," | %.1fs | Defuse %.1fs", tLeft, dLeft);
     }else{
-        std::snprintf(buf,sizeof(buf),"Bomb %c | %.1fs", g_bombSite==1?'B':'A', tLeft);
+        std::snprintf(tail,sizeof(tail)," | %.1fs", tLeft);
     }
+    char siteStr[2] = { (char)(g_bombSite==1?'B':'A'), '\0' };
     ImDrawList*dl=ImGui::GetForegroundDrawList();if(!dl)return;
-    ImVec2 ts=ImGui::CalcTextSize(buf);
-    float pad=6.f;
-    ImVec2 pos{sw*0.5f-ts.x*0.5f-pad,30.f};
-    dl->AddRectFilled(pos,{pos.x+ts.x+pad*2.f,pos.y+ts.y+pad*2.f},IM_COL32(20,20,25,200),6.f);
-    dl->AddText({pos.x+pad,pos.y+pad},IM_COL32(255,180,90,255),buf);
+    ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
+    const float fs = reg->LegacySize;
+    ImVec2 wBomb = reg->CalcTextSizeA(fs, FLT_MAX, 0.f, "Bomb ");
+    ImVec2 wSite = reg->CalcTextSizeA(fs, FLT_MAX, 0.f, siteStr);
+    ImVec2 wTail = reg->CalcTextSizeA(fs, FLT_MAX, 0.f, tail);
+    float tw = wBomb.x + wSite.x + wTail.x;
+    float th = (std::max)({ wBomb.y, wSite.y, wTail.y });
+    float pad=8.f;
+    ImVec2 pos{sw*0.5f-tw*0.5f-pad,30.f};
+    ImVec2 boxMax{pos.x+tw+pad*2.f,pos.y+th+pad*2.f};
+    DrawOverlayWatermarkChrome(dl, pos, boxMax, 6.f);
+    ImU32 acc = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),255);
+    ImU32 dim = IM_COL32(180,182,190,255);
+    float tx = pos.x + pad;
+    float ty = pos.y + pad;
+    dl->AddText(reg, fs, {tx, ty}, dim, "Bomb ");
+    tx += wBomb.x;
+    dl->AddText(reg, fs, {tx, ty}, acc, siteStr);
+    tx += wSite.x;
+    dl->AddText(reg, fs, {tx, ty}, dim, tail);
 }
 
 static bool IsInputMessage(UINT msg){
@@ -2659,17 +2703,17 @@ static bool KeyBindWidget(const char* label, int* key){
     const bool hovered = ImGui::IsMouseHoveringRect(ImGui::GetCursorScreenPos(),
         {ImGui::GetCursorScreenPos().x+90.f, ImGui::GetCursorScreenPos().y+28.f});
 
-    ThemeColors theme = GetThemeColors();
     ImVec2 btnPos = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const char* btn = active ? "..." : KeyName(*key);
 
-    // Button background
-    ImU32 btnBg = active ? IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),200)
-                        : (hovered ? IM_COL32(50,50,70,180) : IM_COL32(35,35,50,150));
-    dl->AddRectFilled(btnPos, {btnPos.x+90.f, btnPos.y+26.f}, btnBg, 5.f);
-    dl->AddRect(btnPos, {btnPos.x+90.f, btnPos.y+26.f},
-        IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),150), 5.f, 0, 1.5f);
+    ImU32 btnBg = active
+        ? IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),210)
+        : IM_COL32(23,23,23,220);
+    if(hovered && !active)
+        btnBg = IM_COL32(28,30,36,235);
+    dl->AddRectFilled(btnPos, {btnPos.x+90.f, btnPos.y+26.f}, btnBg, 6.f);
+    dl->AddRect(btnPos, {btnPos.x+90.f, btnPos.y+26.f}, IM_COL32(50,52,60,200), 6.f, 0, 1.f);
 
     ImGui::Button(btn, ImVec2(80,0));
     if(ImGui::IsItemClicked()){
@@ -2684,195 +2728,11 @@ static bool KeyBindWidget(const char* label, int* key){
         }
     }
     ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_Text, hovered ? theme.text : theme.textDim);
+    ImU32 tc = hovered ? IM_COL32(220,220,220,255) : IM_COL32(100,100,110,255);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(tc));
     ImGui::TextUnformatted(label);
     ImGui::PopStyleColor();
     ImGui::PopID();
-    return changed;
-}
-
-static bool ToggleSwitch(const char* label, bool* v, int idx){
-    float& anim = g_toggleAnim[idx % 128];
-    ImGuiIO& io = ImGui::GetIO();
-    anim = LerpF(anim, *v ? 1.f : 0.f, io.DeltaTime * 18.f);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 p = ImGui::GetCursorScreenPos();
-    ThemeColors theme = GetThemeColors();
-    float h=22.f, w=48.f, r=h*0.5f;
-
-    // Glow effect on enabled state
-    float glowIntensity = 0.5f + sinf((float)ImGui::GetTime()*3.0f)*0.3f;
-    if(*v && g_menuTheme==1) { // Glassmorphism glow
-        dl->AddRectFilled(p,{p.x+w,p.y+h},IM_COL32((int)(g_accentColor[0]*255.f*glowIntensity),(int)(g_accentColor[1]*255.f*glowIntensity),(int)(g_accentColor[2]*255.f*glowIntensity),50),r);
-    }
-
-    // Background track with smooth color transition
-    ImU32 trackCol = IM_COL32(
-        (int)LerpF((float)((theme.toggleBg>>0)&0xFF), (float)((theme.toggleFill>>0)&0xFF), anim),
-        (int)LerpF((float)((theme.toggleBg>>8)&0xFF), (float)((theme.toggleFill>>8)&0xFF), anim),
-        (int)LerpF((float)((theme.toggleBg>>16)&0xFF), (float)((theme.toggleFill>>16)&0xFF), anim),
-        (int)LerpF(140.f, 240.f, anim));
-
-    dl->AddRectFilled(p,{p.x+w,p.y+h},trackCol,r);
-
-    // Border glow
-    ImU32 borderCol = IM_COL32((int)(g_accentColor[0]*255.f*0.8f),(int)(g_accentColor[1]*255.f*0.8f),(int)(g_accentColor[2]*255.f*0.8f),(int)(150.f*anim));
-    dl->AddRect(p,{p.x+w,p.y+h},borderCol,r,0,2.f);
-
-    // Shadow layers per theme
-    if(g_menuTheme==2) { // Neumorphism shadow
-        dl->AddRectFilled({p.x+2.f,p.y+2.f},{p.x+w-2.f,p.y+h-2.f},IM_COL32(0,0,0,40),r);
-    }
-
-    // Knob with enhanced animation
-    float knobX = p.x+r+anim*(w-h);
-    dl->AddCircleFilled({knobX,p.y+r},r-3.f,IM_COL32(248,250,255,255),20);
-
-    // Knob border effects
-    if(g_menuTheme==2) { // Neumorphism
-        dl->AddCircle({knobX,p.y+r},r-3.f,IM_COL32(0,0,0,60),20,2.2f);
-    } else if(g_menuTheme==1) { // Glassmorphism
-        dl->AddCircle({knobX,p.y+r},r-3.f,IM_COL32((int)(g_accentColor[0]*255.f),(int)(g_accentColor[1]*255.f),(int)(g_accentColor[2]*255.f),(int)(100.f*anim)),20,1.5f);
-    } else { // Dark Pro - accent glow
-        dl->AddCircle({knobX,p.y+r},r-3.f,IM_COL32((int)(g_accentColor[0]*255.f),(int)(g_accentColor[1]*255.f),(int)(g_accentColor[2]*255.f),(int)(80.f*anim)),20,1.8f);
-    }
-
-    ImGui::InvisibleButton(label,{w+8.f,h});
-    bool hovered = ImGui::IsItemHovered();
-    bool clicked = ImGui::IsItemClicked();
-    if(clicked) *v=!*v;
-
-    ImGui::SameLine();
-    ImVec4 textCol = hovered ? ImVec4((float)((theme.text>>0)&0xFF)/255.f,(float)((theme.text>>8)&0xFF)/255.f,(float)((theme.text>>16)&0xFF)/255.f,1.f) :
-                              ImVec4((float)((theme.textDim>>0)&0xFF)/255.f,(float)((theme.textDim>>8)&0xFF)/255.f,(float)((theme.textDim>>16)&0xFF)/255.f,0.7f);
-    ImGui::PushStyleColor(ImGuiCol_Text, textCol);
-    const char* end = strstr(label, "##");
-    if(end) ImGui::TextUnformatted(label, end);
-    else ImGui::TextUnformatted(label);
-    ImGui::PopStyleColor();
-    return false;
-}
-
-#pragma warning(push)
-#pragma warning(disable:4505)
-static void SectionHeader(const char* text){
-    ImGui::Spacing();
-    ImVec2 p = ImGui::GetCursorScreenPos();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 ts = ImGui::CalcTextSize(text);
-    ThemeColors theme = GetThemeColors();
-    ImU32 acc = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),240);
-    float lineY = p.y + ts.y*0.5f;
-    float glowIntensity = 0.6f + sinf((float)ImGui::GetTime()*2.0f)*0.4f;
-
-    if(g_menuTheme==2) { // Neumorphism - enhanced embossed effect
-        // Outer shadow (more dramatic)
-        dl->AddRectFilled({p.x,lineY-1.5f},{p.x+ts.x+60.f,lineY+1.5f},IM_COL32(8,10,14,100),2.f);
-        // Main line
-        dl->AddRectFilled({p.x,lineY-0.8f},{p.x+ts.x+60.f,lineY+0.8f},IM_COL32(70,90,120,150),1.f);
-        // Highlight (enhanced)
-        dl->AddRectFilled({p.x,lineY-0.3f},{p.x+ts.x+60.f,lineY+0.3f},IM_COL32(150,170,200,100),0.5f);
-    } else if(g_menuTheme==1) { // Glassmorphism - enhanced glow effect
-        float glow = sinf((float)ImGui::GetTime()*2.0f)*25.f+55.f;
-        dl->AddRectFilledMultiColor({p.x,lineY-0.8f},{p.x+ts.x+70.f,lineY+0.8f},
-            acc,IM_COL32((int)(g_accentColor[0]*255.f),(int)(g_accentColor[1]*255.f),(int)(g_accentColor[2]*255.f),(int)glow),
-            IM_COL32(0,0,0,0),acc);
-        // Glow layer (stronger)
-        dl->AddRectFilled({p.x-3.f,lineY-1.2f},{p.x+ts.x+67.f,lineY+1.2f},
-            IM_COL32((int)(g_accentColor[0]*200.f),(int)(g_accentColor[1]*200.f),(int)(g_accentColor[2]*200.f),(int)(glow*0.5f)),3.f);
-    } else { // Dark Pro - enhanced gradient with glow
-        dl->AddRectFilledMultiColor({p.x,lineY-0.7f},{p.x+ts.x+65.f,lineY+0.7f},
-            acc,IM_COL32((int)(g_accentColor[0]*255.f*(0.7f+glowIntensity*0.3f)),(int)(g_accentColor[1]*255.f*(0.7f+glowIntensity*0.3f)),(int)(g_accentColor[2]*255.f*(0.7f+glowIntensity*0.3f)),200),
-            IM_COL32(0,0,0,0),IM_COL32(0,0,0,0));
-    }
-
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(g_accentColor[0],g_accentColor[1],g_accentColor[2],1.0f));
-    ImGui::TextUnformatted(text);
-    ImGui::PopStyleColor();
-    ImGui::Spacing();
-}
-
-// Enhanced combo with theme styling
-static bool StyledCombo(const char* label, int* current_item, const char* const items[], int items_count) {
-    ThemeColors theme = GetThemeColors();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.f, 5.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.f);
-
-    float glowIntensity = 0.5f + sinf((float)ImGui::GetTime() * 2.f) * 0.2f;
-
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(35.f/255.f, 35.f/255.f, 50.f/255.f, 160.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(45.f/255.f, 45.f/255.f, 65.f/255.f, 200.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4((g_accentColor[0]*0.4f), (g_accentColor[1]*0.4f), (g_accentColor[2]*0.4f), 0.7f));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4((float)((theme.bg>>0)&0xFF)/255.f, (float)((theme.bg>>8)&0xFF)/255.f, (float)((theme.bg>>16)&0xFF)/255.f, 230.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(g_accentColor[0]*0.6f, g_accentColor[1]*0.6f, g_accentColor[2]*0.6f, 0.6f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(g_accentColor[0]*0.8f, g_accentColor[1]*0.8f, g_accentColor[2]*0.8f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(g_accentColor[0]*glowIntensity, g_accentColor[1]*glowIntensity, g_accentColor[2]*glowIntensity, 0.8f));
-
-    bool changed = ImGui::Combo(label, current_item, items, items_count, 5);
-
-    ImGui::PopStyleColor(7);
-    ImGui::PopStyleVar(4);
-
-    return changed;
-}
-
-// Simplified slider for new menu
-static bool StyledSliderFloat(const char* label, const char* format, float* v, float v_min, float v_max) {
-    ImGui::PushItemWidth(-60.f);
-    bool changed = ImGui::SliderFloat(label, v, v_min, v_max, format);
-    ImGui::PopItemWidth();
-    return changed;
-}
-
-// Enhanced slider for integers with glow effect
-static bool StyledSliderInt(const char* label, int* v, int v_min, int v_max, const char* format = "%d") {
-    ThemeColors theme = GetThemeColors();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.f, 6.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.f);
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 8.f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
-
-    float glowIntensity = 0.5f + sinf((float)ImGui::GetTime() * 2.f) * 0.3f;
-    ImVec4 glowCol(g_accentColor[0]*glowIntensity, g_accentColor[1]*glowIntensity, g_accentColor[2]*glowIntensity, 0.6f);
-
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(40.f/255.f, 40.f/255.f, 55.f/255.f, 160.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(50.f/255.f, 50.f/255.f, 70.f/255.f, 200.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(g_accentColor[0], g_accentColor[1], g_accentColor[2], 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(g_accentColor[0]*1.2f, g_accentColor[1]*1.2f, g_accentColor[2]*1.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Border, glowCol);
-
-    bool changed = ImGui::SliderInt(label, v, v_min, v_max, format);
-
-    ImGui::PopStyleColor(5);
-    ImGui::PopStyleVar(4);
-
-    return changed;
-}
-
-// Enhanced color picker with theme styling and glow
-static bool StyledColorEdit4(const char* label, float col[4], ImGuiColorEditFlags flags = 0) {
-    ThemeColors theme = GetThemeColors();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
-
-    float glowIntensity = 0.6f + sinf((float)ImGui::GetTime() * 2.5f) * 0.4f;
-
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(35.f/255.f, 35.f/255.f, 50.f/255.f, 160.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(50.f/255.f, 50.f/255.f, 70.f/255.f, 200.f/255.f));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(col[0], col[1], col[2], col[3]*0.8f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(col[0]*1.2f, col[1]*1.2f, col[2]*1.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(g_accentColor[0]*glowIntensity, g_accentColor[1]*glowIntensity, g_accentColor[2]*glowIntensity, 0.8f));
-
-    bool changed = ImGui::ColorEdit4(label, col, flags);
-
-    ImGui::PopStyleColor(5);
-    ImGui::PopStyleVar(2);
-
     return changed;
 }
 
@@ -2910,36 +2770,43 @@ static void SmoothScrollCurrentWindow(float speed = 45.f, float damping = 14.f){
     ImGui::SetScrollY(next);
 }
 
+static const char* SectionIconForTitle(const char* title){
+    if(!title) return "";
+    if(strcmp(title, "Aimbot") == 0) return "A";
+    if(strcmp(title, "Triggerbot") == 0) return "T";
+    if(strcmp(title, "ESP") == 0) return "E";
+    if(strcmp(title, "Preview") == 0) return "P";
+    if(strcmp(title, "Effects") == 0) return "F";
+    if(strcmp(title, "Skins") == 0) return "S";
+    if(strcmp(title, "World") == 0) return "W";
+    if(strcmp(title, "Misc") == 0) return "M";
+    if(strcmp(title, "Config") == 0) return "C";
+    return "";
+}
+
 static void PidoSection(const char* title){
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    const float topGap = 10.f * s;
-    const float labelH = 22.f * s;
-    const float totalH = topGap + labelH;
+    if(width < 4.f) return;
 
-    ImDrawList* dl  = ImGui::GetWindowDrawList();
-    ImFont* fBold   = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
+    // Lightweight sub-section divider — compact horizontal rule + dim label
+    const float h    = 20.f * s;
+    const float fpx  = 9.f * s;
+    ImDrawList* dl   = ImGui::GetWindowDrawList();
+    ImFont* reg      = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
+    float midY       = pos.y + h * 0.5f;
 
-    float midY = pos.y + topGap + labelH * 0.5f;
+    // Full-width thin hairline
+    dl->AddLine({pos.x+2.f*s, midY}, {pos.x+width-2.f*s, midY}, IM_COL32(48,51,68,50));
 
-    // Left accent bar
-    dl->AddRectFilled({pos.x, pos.y+topGap+3.f*s}, {pos.x+2.5f*s, pos.y+topGap+labelH-3.f*s}, g_pido.accent, 1.5f*s);
+    // Accent dot + dim text (no background rect)
+    ImVec2 tsz = reg->CalcTextSizeA(fpx, FLT_MAX, 0.f, title);
+    float lx   = pos.x + 10.f * s;
+    dl->AddCircleFilled({lx, midY}, 1.5f*s, WithAlpha(g_pido.accent, 0.7f), 8);
+    dl->AddText(reg, fpx, {lx + 4.f*s, midY - tsz.y*0.5f}, IM_COL32(95,100,125,220), title);
 
-    // Label
-    float textY = midY - 5.5f*s;
-    dl->AddText(fBold, 11.f*s, {pos.x+9.f*s, textY}, g_pido.text, title);
-
-    // Right rule with accent fade then dim
-    ImVec2 lSz = fBold->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, title);
-    float lx = pos.x + 11.f*s + lSz.x + 8.f*s;
-    int ar = (int)(g_accentColor[0]*255), ag = (int)(g_accentColor[1]*255), ab = (int)(g_accentColor[2]*255);
-    dl->AddRectFilledMultiColor(
-        {lx, midY-0.5f}, {lx+16.f*s, midY+0.5f},
-        IM_COL32(ar,ag,ab,90), IM_COL32(ar,ag,ab,0), IM_COL32(ar,ag,ab,0), IM_COL32(ar,ag,ab,90));
-    dl->AddRectFilled({lx+16.f*s, midY-0.5f}, {pos.x+width-4.f*s, midY+0.5f}, IM_COL32(45,48,60,60));
-
-    ImGui::Dummy(ImVec2(width, totalH));
+    ImGui::Dummy(ImVec2(width, h));
 }
 
 static bool BeginPidoChild(const char* id, const ImVec2& size){
@@ -2949,16 +2816,16 @@ static bool BeginPidoChild(const char* id, const ImVec2& size){
     bool open = ImGui::BeginChild(id, size, false);
     ImGui::SetWindowFontScale(scale);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 p = ImGui::GetWindowPos();
+    ImVec2 p  = ImGui::GetWindowPos();
     ImVec2 sw = ImGui::GetWindowSize();
-    const float rnd = 8.f * scale;
-    // Background
-    dl->AddRectFilled(p, {p.x+sw.x, p.y+sw.y}, g_pido.bgFill, rnd);
-    // Border
+    const float rnd = g_skeetUi.childRounding * scale;
+    dl->AddRectFilled(p, {p.x+sw.x, p.y+sw.y}, g_pido.elemBg, rnd);
+    // Outer border — subtle blue-gray
     dl->AddRect(p, {p.x+sw.x, p.y+sw.y}, g_pido.elemStroke, rnd, 0, 1.f);
-    // Top accent bar
-    int ac_r = (int)(g_accentColor[0]*255), ac_g = (int)(g_accentColor[1]*255), ac_b = (int)(g_accentColor[2]*255);
-    dl->AddRectFilled({p.x+rnd, p.y}, {p.x+sw.x-rnd, p.y+2.f*scale}, IM_COL32(ac_r,ac_g,ac_b,180), 1.f);
+    // Inner dark border — slight blue tint
+    dl->AddRect({p.x+1.f, p.y+1.f}, {p.x+sw.x-1.f, p.y+sw.y-1.f}, IM_COL32(8, 8, 12, 180), rnd, 0, 1.f);
+    // Glass top-edge highlight — creates premium "raised panel" depth
+    dl->AddLine({p.x+3.f, p.y+1.f}, {p.x+sw.x-3.f, p.y+1.f}, IM_COL32(255, 255, 255, 14));
     return open;
 }
 
@@ -2968,66 +2835,178 @@ static void EndPidoChild(){
     ImGui::PopStyleVar(2);
 }
 
-static bool PidoTab(const char* icon, const char* label, const char* desc, bool selected, float forceW = 0.f){
+// Tab generation counter — incremented on tab switch to reset group entrance anims
+static int g_grpGeneration = 0;
+
+static bool BeginPidoGroup(const char* id, const char* title, const ImVec2& size){
+    float s = MenuScale();
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.f*s, 2.f*s));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(0.f,   2.f*s));
+    // NoScrollWithMouse — SmoothScrollCurrentWindow handles wheel exclusively
+    bool open = ImGui::BeginChild(id, size, false,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::SetWindowFontScale(s);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 p  = ImGui::GetWindowPos();
+    ImVec2 sw = ImGui::GetWindowSize();
+    const float rnd = 4.f * s;
+
+    // Entrance fade-in — keyed on (id ^ generation) so it resets on tab switch
+    static std::unordered_map<ImGuiID, float> s_grpAnims;
+    ImGuiID gid = ImGui::GetID(id) ^ (ImGuiID)(g_grpGeneration * 0x9e3779b9u);
+    float& ga = s_grpAnims[gid];
+    ga = LerpF(ga, 1.f, 1.f - expf(-10.f * ImGui::GetIO().DeltaTime));
+
+    // Panel background + border
+    dl->AddRectFilled(p, {p.x+sw.x, p.y+sw.y}, WithAlpha(g_pido.elemBg, ga), rnd);
+    dl->AddRect(p, {p.x+sw.x, p.y+sw.y}, WithAlpha(g_pido.elemStroke, ga), rnd, 0, 1.f);
+
+    // Title row inside the group: centered text + thin separator below
+    ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
+    const float fpx = 9.f * s;
+    const float titleH = 18.f * s;
+    ImVec2 tsz = reg->CalcTextSizeA(fpx, FLT_MAX, 0.f, title);
+    dl->AddText(reg, fpx, {p.x + (sw.x - tsz.x)*0.5f, p.y + (titleH - tsz.y)*0.5f},
+        WithAlpha(g_pido.textDim, ga), title);
+    dl->AddLine({p.x + 6.f*s, p.y + titleH}, {p.x + sw.x - 6.f*s, p.y + titleH},
+        WithAlpha(g_pido.elemStroke, ga * 0.6f));
+
+    ImGui::SetCursorPosY(titleH + 3.f * s);
+    return open;
+}
+
+static void EndPidoGroup(){
+    SmoothScrollCurrentWindow(45.f * MenuScale(), 14.f);
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+}
+
+static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, bool selected, float forceW = 0.f){
     ImGui::PushID(label);
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    float width = forceW > 0.f ? forceW : ImGui::GetContentRegionAvail().x;
+    float width = (forceW > 0.f) ? forceW : ImGui::GetContentRegionAvail().x;
     float height = 40.f * s;
     ImGui::InvisibleButton("##tab", ImVec2(width, height));
     bool pressed = ImGui::IsItemClicked();
     bool hovered = ImGui::IsItemHovered();
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
 
-    // Animated state
-    static std::unordered_map<ImGuiID, float> s_tabAnim;
-    ImGuiID tid = ImGui::GetID("##tab_anim");
-    float& anim = s_tabAnim[tid];
-    float target = selected ? 1.f : (hovered ? 0.45f : 0.f);
-    anim = LerpF(anim, target, 1.f - expf(-18.f * ImGui::GetIO().DeltaTime));
-
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Row fill
-    if(anim > 0.01f){
-        ImU32 bg;
-        if(selected){
-            int ar = (int)(g_accentColor[0]*18+14), ag = (int)(g_accentColor[1]*18+14), ab = (int)(g_accentColor[2]*18+17);
-            bg = IM_COL32(ar, ag, ab, (int)(200 * anim));
-        } else {
-            bg = IM_COL32(20, 22, 28, (int)(160 * anim));
-        }
-        dl->AddRectFilled({pos.x+4.f*s, pos.y+2.f*s}, {pos.x+width-4.f*s, pos.y+height-2.f*s}, bg, 6.f*s);
-    }
+    // Animated selection indicator (must be before first use)
+    static std::unordered_map<ImGuiID, float> s_tabDotAnims;
+    ImGuiID dotId = ImGui::GetID("##dot");
+    float& dotAnim = s_tabDotAnims[dotId];
+    dotAnim = LerpF(dotAnim, selected ? 1.f : 0.f, 1.f - expf(-14.f * ImGui::GetIO().DeltaTime));
 
-    // Left accent bar (animated height)
-    if(anim > 0.01f && selected){
-        float barH = (height - 12.f*s) * anim;
-        float barY = pos.y + (height - barH)*0.5f;
-        dl->AddRectFilled({pos.x+4.f*s, barY}, {pos.x+7.f*s, barY+barH}, g_pido.accent, 2.f*s);
-    }
+    // Animated bg: blends from transparent to selection color
+    ImU32 rowBg = hovered && !selected ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
+    dl->AddRectFilled(pos, {pos.x+width, pos.y+height}, rowBg, 0.f);
+    if(selected || dotAnim > 0.01f)
+        dl->AddRectFilled(pos, {pos.x+width, pos.y+height},
+            IM_COL32(28, 30, 42, (int)(255.f*dotAnim)), 0.f);
 
-    // Icon + label
-    int ar = (int)(g_accentColor[0]*255), ag = (int)(g_accentColor[1]*255), ab = (int)(g_accentColor[2]*255);
-    ImU32 iconCol = selected ? IM_COL32(ar,ag,ab,255) : (hovered ? g_pido.text : g_pido.textDim);
-    ImU32 textCol = selected ? g_pido.textActive : (hovered ? g_pido.text : g_pido.textDim);
+    // Left accent bar — selected only, thicker
+    if(selected || dotAnim > 0.01f)
+        dl->AddRectFilled({pos.x, pos.y+8.f*s}, {pos.x+3.5f*s*dotAnim, pos.y+height-8.f*s},
+            WithAlpha(g_pido.accent, dotAnim), 2.f);
 
-    float midY = pos.y + height * 0.5f;
-    ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
-    if(font::icomoon){
-        ImVec2 iSz = font::icomoon->CalcTextSizeA(14.f*s, FLT_MAX, 0.f, icon);
-        dl->AddText(font::icomoon, 14.f*s, {pos.x+16.f*s, midY - iSz.y*0.5f}, iconCol, icon);
-    } else {
-        // Fallback: first letter of label in a small circle
-        char fb[2] = { label[0], '\0' };
-        ImVec2 fbSz = bold->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, fb);
-        float cx = pos.x + 16.f*s + 7.f*s;
-        dl->AddCircleFilled({cx, midY}, 8.f*s, IM_COL32(ar,ag,ab, selected ? 200 : 80), 16);
-        dl->AddText(bold, 11.f*s, {cx - fbSz.x*0.5f, midY - fbSz.y*0.5f}, IM_COL32(255,255,255,selected?255:180), fb);
-    }
+    // Thin bottom separator between tabs
+    dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f},
+        IM_COL32(255, 255, 255, 8));
+
+    ImU32 txtCol = selected ? g_pido.textActive : (hovered ? g_pido.text : g_pido.textDim);
+    ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    ImVec2 lSz = bold->CalcTextSizeA(12.f*s, FLT_MAX, 0.f, label, labelEnd);
-    dl->AddText(bold, 12.f*s, {pos.x+35.f*s, midY - lSz.y*0.5f}, textCol, label, labelEnd);
+    float midY = pos.y + height * 0.5f;
+    ImU32 dotCol = LerpColor(IM_COL32(50, 52, 64, 200), g_pido.accent, dotAnim);
+
+    // Geometric tab icons — drawn per index encoded in icon string ("0".."4")
+    float tx = pos.x + 32.f*s;
+    if(icon && icon[0] >= '0' && icon[0] <= '4'){
+        int idx = icon[0] - '0';
+        float cx = pos.x + 17.f*s;
+        float r  = 7.f*s;
+        ImU32 ic  = LerpColor(IM_COL32(70,73,95,220), g_pido.accent, dotAnim);
+        ImU32 ic2 = LerpColor(IM_COL32(50,52,68,180), g_pido.accent, dotAnim * 0.6f);
+        switch(idx){
+        case 0: { // Aimbot: crosshair — circle + 4 outer ticks + center dot
+            const float tickLen = 2.8f*s, gap2 = 1.6f*s;
+            dl->AddCircle({cx,midY}, r, ic, 24, 1.f*s);
+            dl->AddLine({cx-r-tickLen, midY}, {cx-r-gap2, midY}, ic, 1.f*s);
+            dl->AddLine({cx+r+gap2, midY}, {cx+r+tickLen, midY}, ic, 1.f*s);
+            dl->AddLine({cx, midY-r-tickLen}, {cx, midY-r-gap2}, ic, 1.f*s);
+            dl->AddLine({cx, midY+r+gap2}, {cx, midY+r+tickLen}, ic, 1.f*s);
+            dl->AddCircleFilled({cx,midY}, 1.6f*s, ic, 8);
+        }   break;
+        case 1: { // Visuals: eye — two arcs forming eyelid shape + filled pupil
+            const int NS = 20;
+            float eyeRx = r + 1.f*s, eyeRy = r * 0.55f;
+            // Upper arc (top of eye)
+            for(int i=0;i<NS;i++){
+                float a0 = 3.14159265f + (float)i/(float)NS * 3.14159265f;
+                float a1 = 3.14159265f + (float)(i+1)/(float)NS * 3.14159265f;
+                dl->AddLine(
+                    {cx + cosf(a0)*eyeRx, midY + sinf(a0)*eyeRy},
+                    {cx + cosf(a1)*eyeRx, midY + sinf(a1)*eyeRy}, ic, 1.f*s);
+            }
+            // Lower arc (bottom of eye)
+            for(int i=0;i<NS;i++){
+                float a0 = (float)i/(float)NS * 3.14159265f;
+                float a1 = (float)(i+1)/(float)NS * 3.14159265f;
+                dl->AddLine(
+                    {cx + cosf(a0)*eyeRx, midY + sinf(a0)*eyeRy},
+                    {cx + cosf(a1)*eyeRx, midY + sinf(a1)*eyeRy}, ic, 1.f*s);
+            }
+            dl->AddCircleFilled({cx, midY}, r*0.32f, ic, 12);
+        }   break;
+        case 2: { // World: globe — circle + 2 horizontal latitude lines + vertical meridian
+            dl->AddCircle({cx,midY}, r, ic, 24, 1.f*s);
+            // Latitude lines at +/-r*0.45
+            float latY1 = midY - r*0.45f, latY2 = midY + r*0.45f;
+            float hw1 = sqrtf(r*r - (r*0.45f)*(r*0.45f));
+            dl->AddLine({cx-hw1, latY1},{cx+hw1, latY1}, ic2, 0.8f*s);
+            dl->AddLine({cx-hw1, latY2},{cx+hw1, latY2}, ic2, 0.8f*s);
+            // Vertical meridian
+            dl->AddLine({cx, midY-r},{cx, midY+r}, ic2, 0.8f*s);
+        }   break;
+        case 3: { // Skins: diamond — 5 points with facet lines
+            ImVec2 top   = {cx,       midY-r};
+            ImVec2 left  = {cx-r*0.8f, midY-r*0.1f};
+            ImVec2 right = {cx+r*0.8f, midY-r*0.1f};
+            ImVec2 botL  = {cx-r*0.5f, midY+r};
+            ImVec2 botR  = {cx+r*0.5f, midY+r};
+            dl->AddLine(top,   left,  ic, 1.f*s);
+            dl->AddLine(top,   right, ic, 1.f*s);
+            dl->AddLine(left,  botL,  ic, 1.f*s);
+            dl->AddLine(right, botR,  ic, 1.f*s);
+            dl->AddLine(botL,  botR,  ic, 1.f*s);
+            dl->AddLine(left,  right, ic2, 0.8f*s);
+            dl->AddLine(left,  botR,  ic2, 0.7f*s);
+            dl->AddLine(right, botL,  ic2, 0.7f*s);
+        }   break;
+        case 4: { // Misc: gear — inner circle + 6 rectangular teeth
+            float ri = r*0.42f, ro = r*0.72f;
+            dl->AddCircle({cx,midY}, ri, ic, 16, 1.f*s);
+            const int TEETH = 6;
+            for(int i=0;i<TEETH;i++){
+                float ang = (float)i / (float)TEETH * 3.14159265f * 2.f;
+                float halfA = 3.14159265f / (float)TEETH * 0.5f;
+                ImVec2 p0 = {cx + cosf(ang-halfA)*ro, midY + sinf(ang-halfA)*ro};
+                ImVec2 p1 = {cx + cosf(ang+halfA)*ro, midY + sinf(ang+halfA)*ro};
+                ImVec2 p2 = {cx + cosf(ang+halfA)*(ro+2.8f*s), midY + sinf(ang+halfA)*(ro+2.8f*s)};
+                ImVec2 p3 = {cx + cosf(ang-halfA)*(ro+2.8f*s), midY + sinf(ang-halfA)*(ro+2.8f*s)};
+                dl->AddQuad(p0, p1, p2, p3, ic, 1.f*s);
+            }
+        }   break;
+        }
+    } else {
+        // Fallback: animated dot
+        dl->AddCircleFilled({pos.x + 11.f*s, midY}, 2.5f*s, dotCol, 12);
+        tx = pos.x + 20.f*s;
+    }
+    dl->AddText(reg, 12.f*s, {tx, midY - reg->LegacySize*s*0.5f}, txtCol, label, labelEnd);
 
     ImGui::SetCursorScreenPos(nextPos);
     ImGui::Dummy(ImVec2(0,0));
@@ -3040,69 +3019,42 @@ static bool PidoToggle(const char* label, const char* desc, bool* v){
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 44.f * s;
-    ImGui::InvisibleButton("##row", ImVec2(width, height));
-    bool pressed = ImGui::IsItemClicked();
-    bool hovered = ImGui::IsItemHovered();
+    float height = g_skeetUi.rowHeight * s;
+    ImGui::Dummy(ImVec2(width, height));
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
-    if(pressed) *v = !*v;
 
-    // Animated toggle state
+    bool hovered = ImGui::IsMouseHoveringRect(pos, {pos.x+width, pos.y+height});
+    if(hovered && ImGui::IsMouseClicked(0)) *v = !*v;
+    bool pressed = hovered && ImGui::IsMouseClicked(0);
+
     static std::unordered_map<ImGuiID, float> s_toggleAnims;
-    ImGuiID tid = ImGui::GetID("##tanim");
+    ImGuiID tid = ImGui::GetID(label);
     float& anim = s_toggleAnims[tid];
-    float targetAnim = *v ? 1.f : 0.f;
-    anim = LerpF(anim, targetAnim, 1.f - expf(-18.f * ImGui::GetIO().DeltaTime));
+    anim = LerpF(anim, *v ? 1.f : 0.f, 1.f - expf(-18.f * ImGui::GetIO().DeltaTime));
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    if(hovered) dl->AddRectFilled(pos, {pos.x+width, pos.y+height}, IM_COL32(255,255,255,5), 2.f*s);
 
-    // Row background
-    ImU32 rowBg = hovered
-        ? IM_COL32(20, 22, 28, 255)
-        : g_pido.elemBg;
-    dl->AddRectFilled(pos, {pos.x+width, pos.y+height}, rowBg, 5.f*s);
-    dl->AddRect(pos, {pos.x+width, pos.y+height}, g_pido.elemStroke, 5.f*s, 0, 1.f);
-
-    // Active left accent bar
-    if(anim > 0.01f){
-        float barH = (height - 12.f*s) * anim;
-        float barYOff = (height - barH) * 0.5f;
-        dl->AddRectFilled(
-            {pos.x, pos.y + barYOff},
-            {pos.x + 2.5f*s, pos.y + barYOff + barH},
-            g_pido.accent, 1.5f*s);
-    }
-
-    ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg  = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
     float midY = pos.y + height * 0.5f;
-    float labelY = (desc && desc[0]) ? pos.y + 7.f*s : midY - bold->LegacySize*s*0.5f;
+
+    // Left square toggle
+    const float sqSz = 8.f * s;
+    const float sqX  = pos.x + 8.f*s;
+    const float sqY  = midY - sqSz * 0.5f;
+    ImU32 sqBorder = anim > 0.01f
+        ? WithAlpha(g_pido.accent, 0.7f + anim * 0.3f)
+        : IM_COL32(50, 52, 72, 200);
+    dl->AddRect({sqX, sqY}, {sqX+sqSz, sqY+sqSz}, sqBorder, 1.5f*s, 0, 1.f*s);
+    if(anim > 0.01f)
+        dl->AddRectFilled({sqX+1.f, sqY+1.f}, {sqX+sqSz-1.f, sqY+sqSz-1.f},
+            WithAlpha(g_pido.accent, anim * 0.9f), 1.f*s);
+
     ImU32 labelCol = *v ? g_pido.textActive : g_pido.text;
-    dl->AddText(bold, 13.f*s, {pos.x+12.f*s, labelY}, labelCol, label, labelEnd);
+    dl->AddText(reg, 11.f*s, {sqX+sqSz+6.f*s, midY-reg->LegacySize*s*0.5f}, labelCol, label, labelEnd);
     if(desc && desc[0])
-        dl->AddText(reg, 11.f*s, {pos.x+12.f*s, pos.y+25.f*s}, g_pido.textDim, desc);
-
-    // Toggle pill
-    float tW = 34.f*s, tH = 17.f*s, r = tH*0.5f;
-    ImVec2 tPos{pos.x + width - tW - 10.f*s, midY - tH*0.5f};
-
-    // Interpolated track color: dark -> accent
-    int ar = (int)(g_accentColor[0]*255), ag = (int)(g_accentColor[1]*255), ab = (int)(g_accentColor[2]*255);
-    ImU32 trackCol = IM_COL32(
-        (int)(28 + anim*(ar - 28)),
-        (int)(28 + anim*(ag - 28)),
-        (int)(28 + anim*(ab - 28)),
-        255);
-    dl->AddRectFilled(tPos, {tPos.x+tW, tPos.y+tH}, trackCol, r);
-
-    // Animated knob position
-    float knobTravel = tW - tH;
-    float knobX = tPos.x + r + anim * knobTravel;
-    // Knob shadow
-    dl->AddCircleFilled({knobX, tPos.y + r}, r - 1.f, IM_COL32(0,0,0,60), 20);
-    // Knob
-    dl->AddCircleFilled({knobX, tPos.y + r}, r - 2.f, IM_COL32(248, 250, 255, 255), 20);
+        dl->AddText(reg, 9.f*s, {sqX+sqSz+6.f*s, midY+2.f*s}, g_pido.textDim, desc);
 
     ImGui::SetCursorScreenPos(nextPos);
     ImGui::Dummy(ImVec2(0,0));
@@ -3115,71 +3067,74 @@ static bool PidoSliderFloat(const char* label, const char* desc, float* v, float
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 44.f * s;
-    ImVec2 bbMin = pos, bbMax{pos.x+width, pos.y+height};
-
-    // Invisible button for mouse interaction
-    ImGui::InvisibleButton("##sliderarea", ImVec2(width, height));
-    bool hovered  = ImGui::IsItemHovered();
-    bool active   = ImGui::IsItemActive();
+    float height = g_skeetUi.rowHeight * s;
+    ImGui::Dummy(ImVec2(width, height));
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
 
-    // Track geometry
-    const float trackRightPad = 10.f*s;
-    const float valW          = 36.f*s;
-    const float trackW        = 90.f*s;
-    const float trackH        = 4.f*s;
-    const float grabR         = 5.f*s;
-    float trackX1 = bbMax.x - trackRightPad - valW - 6.f*s - trackW;
-    float trackX2 = trackX1 + trackW;
-    float trackY  = pos.y + height * 0.5f;
+    float midY = pos.y + height * 0.5f;
+    bool hovered = ImGui::IsMouseHoveringRect(pos, {pos.x+width, pos.y+height});
 
-    // Handle drag
-    if(active){
-        float mouseX = ImGui::GetIO().MousePos.x;
-        float t = Clampf((mouseX - trackX1) / trackW, 0.f, 1.f);
+    // Geometry
+    const float btnSz = 12.f*s, trackW = 80.f*s, trackH = 3.f*s, gp = 4.f*s, rp = 8.f*s;
+    float plusL  = pos.x + width - rp - btnSz;
+    float trackR = plusL - gp;
+    float trackL = trackR - trackW;
+    float minusL = trackL - gp - btnSz;
+
+    // Plus/minus invisible buttons
+    ImGui::SetCursorScreenPos({plusL, pos.y});
+    ImGui::InvisibleButton("##plus", ImVec2(btnSz, height));
+    bool plusHov = ImGui::IsItemHovered();
+    bool plusClicked = ImGui::IsItemClicked();
+    if(plusClicked) *v = Clampf(*v + (v_max-v_min)/100.f, v_min, v_max);
+
+    ImGui::SetCursorScreenPos({minusL, pos.y});
+    ImGui::InvisibleButton("##minus", ImVec2(btnSz, height));
+    bool minusHov = ImGui::IsItemHovered();
+    bool minusClicked = ImGui::IsItemClicked();
+    if(minusClicked) *v = Clampf(*v - (v_max-v_min)/100.f, v_min, v_max);
+
+    // Track drag
+    ImGui::SetCursorScreenPos({trackL, pos.y});
+    ImGui::InvisibleButton("##track", ImVec2(trackW, height));
+    bool trackActive = ImGui::IsItemActive();
+    if(trackActive){
+        float t = Clampf((ImGui::GetIO().MousePos.x - trackL) / trackW, 0.f, 1.f);
         *v = v_min + t * (v_max - v_min);
     }
 
-    // Draw
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 rowBg = hovered ? IM_COL32(20,22,28,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, rowBg, 5.f*s);
-    dl->AddRect(bbMin, bbMax, hovered ? IM_COL32(50,52,68,255) : g_pido.elemStroke, 5.f*s, 0, 1.f);
+    if(hovered) dl->AddRectFilled(pos, {pos.x+width, pos.y+height}, IM_COL32(255,255,255,4), 2.f*s);
 
-    // Label
-    ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg  = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float midY = pos.y + height * 0.5f;
-    dl->AddText(bold, 13.f*s, {pos.x+12.f*s, midY - 6.5f*s}, g_pido.textActive, label, labelEnd);
+    dl->AddText(reg, 11.f*s, {pos.x+8.f*s, midY-reg->LegacySize*s*0.5f}, g_pido.text, label, labelEnd);
 
-    // Track background (full)
-    dl->AddRectFilled({trackX1, trackY - trackH*0.5f}, {trackX2, trackY + trackH*0.5f}, IM_COL32(30,32,42,255), trackH*0.5f);
-
-    // Track fill (accent)
+    // Track bg
+    dl->AddRectFilled({trackL, midY-trackH*0.5f}, {trackR, midY+trackH*0.5f}, IM_COL32(28,28,42,255), trackH*0.5f);
+    // Track fill
     float t = Clampf((*v - v_min) / (v_max - v_min), 0.f, 1.f);
-    float fillX = trackX1 + t * trackW;
-    if(fillX > trackX1)
-        dl->AddRectFilled({trackX1, trackY - trackH*0.5f}, {fillX, trackY + trackH*0.5f}, g_pido.accent, trackH*0.5f);
+    float fillX = trackL + t * trackW;
+    if(fillX > trackL)
+        dl->AddRectFilled({trackL, midY-trackH*0.5f}, {fillX, midY+trackH*0.5f}, g_pido.accent, trackH*0.5f);
 
-    // Grab handle
-    ImU32 grabCol = active ? g_pido.accent : IM_COL32(240,242,250,255);
-    dl->AddCircleFilled({fillX, trackY}, grabR + 1.f*s, IM_COL32(0,0,0,60), 16); // shadow
-    dl->AddCircleFilled({fillX, trackY}, grabR, grabCol, 16);
-    if(active) dl->AddCircle({fillX, trackY}, grabR, g_pido.accent, 16, 1.5f);
-
-    // Value text
+    // Value above track, centered
     char valBuf[32]; std::snprintf(valBuf, sizeof(valBuf), format, *v);
-    ImVec2 valSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, valBuf);
-    float valX = bbMax.x - trackRightPad - valSz.x;
-    dl->AddText(reg, 11.f*s, {valX, midY - valSz.y*0.5f},
-        hovered ? g_pido.textActive : g_pido.textDim, valBuf);
+    ImVec2 vSz = reg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, valBuf);
+    dl->AddText(reg, 9.f*s, {trackL+(trackW-vSz.x)*0.5f, midY-trackH*0.5f-vSz.y-1.f*s}, g_pido.textDim, valBuf);
+
+    // -/+ symbols
+    ImVec2 mSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, "-");
+    ImVec2 pSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, "+");
+    dl->AddText(reg, 11.f*s, {minusL+(btnSz-mSz.x)*0.5f, midY-mSz.y*0.5f},
+        minusHov ? g_pido.accent : g_pido.textDim, "-");
+    dl->AddText(reg, 11.f*s, {plusL+(btnSz-pSz.x)*0.5f, midY-pSz.y*0.5f},
+        plusHov ? g_pido.accent : g_pido.textDim, "+");
 
     ImGui::SetCursorScreenPos(nextPos);
     ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
-    return active;
+    return trackActive || plusClicked || minusClicked;
 }
 
 static bool PidoSliderInt(const char* label, const char* desc, int* v, int v_min, int v_max, const char* format = "%d"){
@@ -3187,56 +3142,67 @@ static bool PidoSliderInt(const char* label, const char* desc, int* v, int v_min
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 44.f * s;
-    ImVec2 bbMin = pos, bbMax{pos.x+width, pos.y+height};
-
-    ImGui::InvisibleButton("##sliderarea", ImVec2(width, height));
-    bool hovered = ImGui::IsItemHovered();
-    bool active  = ImGui::IsItemActive();
+    float height = g_skeetUi.rowHeight * s;
+    ImGui::Dummy(ImVec2(width, height));
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
 
-    const float trackRightPad = 10.f*s, valW = 36.f*s, trackW = 90.f*s;
-    const float trackH = 4.f*s, grabR = 5.f*s;
-    float trackX1 = bbMax.x - trackRightPad - valW - 6.f*s - trackW;
-    float trackX2 = trackX1 + trackW;
-    float trackY  = pos.y + height * 0.5f;
+    float midY = pos.y + height * 0.5f;
+    bool hovered = ImGui::IsMouseHoveringRect(pos, {pos.x+width, pos.y+height});
 
-    if(active){
-        float t = Clampf((ImGui::GetIO().MousePos.x - trackX1) / trackW, 0.f, 1.f);
+    const float btnSz = 12.f*s, trackW = 80.f*s, trackH = 3.f*s, gp = 4.f*s, rp = 8.f*s;
+    float plusL  = pos.x + width - rp - btnSz;
+    float trackR = plusL - gp;
+    float trackL = trackR - trackW;
+    float minusL = trackL - gp - btnSz;
+
+    ImGui::SetCursorScreenPos({plusL, pos.y});
+    ImGui::InvisibleButton("##plus", ImVec2(btnSz, height));
+    bool plusHov = ImGui::IsItemHovered();
+    bool plusClicked = ImGui::IsItemClicked();
+    if(plusClicked) *v = (std::min)(*v + 1, v_max);
+
+    ImGui::SetCursorScreenPos({minusL, pos.y});
+    ImGui::InvisibleButton("##minus", ImVec2(btnSz, height));
+    bool minusHov = ImGui::IsItemHovered();
+    bool minusClicked = ImGui::IsItemClicked();
+    if(minusClicked) *v = (std::max)(*v - 1, v_min);
+
+    ImGui::SetCursorScreenPos({trackL, pos.y});
+    ImGui::InvisibleButton("##track", ImVec2(trackW, height));
+    bool trackActive = ImGui::IsItemActive();
+    if(trackActive){
+        float t = Clampf((ImGui::GetIO().MousePos.x - trackL) / trackW, 0.f, 1.f);
         *v = v_min + (int)(t * (float)(v_max - v_min) + 0.5f);
     }
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 rowBg = hovered ? IM_COL32(20,22,28,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, rowBg, 5.f*s);
-    dl->AddRect(bbMin, bbMax, hovered ? IM_COL32(50,52,68,255) : g_pido.elemStroke, 5.f*s, 0, 1.f);
+    if(hovered) dl->AddRectFilled(pos, {pos.x+width, pos.y+height}, IM_COL32(255,255,255,4), 2.f*s);
 
-    ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg  = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float midY = pos.y + height * 0.5f;
-    dl->AddText(bold, 13.f*s, {pos.x+12.f*s, midY - 6.5f*s}, g_pido.textActive, label, labelEnd);
+    dl->AddText(reg, 11.f*s, {pos.x+8.f*s, midY-reg->LegacySize*s*0.5f}, g_pido.text, label, labelEnd);
 
-    dl->AddRectFilled({trackX1, trackY-trackH*0.5f}, {trackX2, trackY+trackH*0.5f}, IM_COL32(30,32,42,255), trackH*0.5f);
+    dl->AddRectFilled({trackL, midY-trackH*0.5f}, {trackR, midY+trackH*0.5f}, IM_COL32(28,28,42,255), trackH*0.5f);
     float t = Clampf((float)(*v - v_min)/(float)(v_max - v_min), 0.f, 1.f);
-    float fillX = trackX1 + t * trackW;
-    if(fillX > trackX1)
-        dl->AddRectFilled({trackX1, trackY-trackH*0.5f}, {fillX, trackY+trackH*0.5f}, g_pido.accent, trackH*0.5f);
-
-    ImU32 grabCol = active ? g_pido.accent : IM_COL32(240,242,250,255);
-    dl->AddCircleFilled({fillX, trackY}, grabR+1.f*s, IM_COL32(0,0,0,60), 16);
-    dl->AddCircleFilled({fillX, trackY}, grabR, grabCol, 16);
-    if(active) dl->AddCircle({fillX, trackY}, grabR, g_pido.accent, 16, 1.5f);
+    float fillX = trackL + t * trackW;
+    if(fillX > trackL)
+        dl->AddRectFilled({trackL, midY-trackH*0.5f}, {fillX, midY+trackH*0.5f}, g_pido.accent, trackH*0.5f);
 
     char valBuf[32]; std::snprintf(valBuf, sizeof(valBuf), format, *v);
-    ImVec2 valSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, valBuf);
-    dl->AddText(reg, 11.f*s, {bbMax.x - trackRightPad - valSz.x, midY - valSz.y*0.5f},
-        hovered ? g_pido.textActive : g_pido.textDim, valBuf);
+    ImVec2 vSz = reg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, valBuf);
+    dl->AddText(reg, 9.f*s, {trackL+(trackW-vSz.x)*0.5f, midY-trackH*0.5f-vSz.y-1.f*s}, g_pido.textDim, valBuf);
+
+    ImVec2 mSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, "-");
+    ImVec2 pSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, "+");
+    dl->AddText(reg, 11.f*s, {minusL+(btnSz-mSz.x)*0.5f, midY-mSz.y*0.5f},
+        minusHov ? g_pido.accent : g_pido.textDim, "-");
+    dl->AddText(reg, 11.f*s, {plusL+(btnSz-pSz.x)*0.5f, midY-pSz.y*0.5f},
+        plusHov ? g_pido.accent : g_pido.textDim, "+");
 
     ImGui::SetCursorScreenPos(nextPos);
     ImGui::Dummy(ImVec2(0,0));
     ImGui::PopID();
-    return active;
+    return trackActive || plusClicked || minusClicked;
 }
 
 static bool PidoCombo(const char* label, const char* desc, int* current_item, const char* const items[], int items_count){
@@ -3244,7 +3210,7 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 44.f * s;
+    float height = g_skeetUi.rowHeight * s;
 
     // Full-row invisible button
     ImGui::InvisibleButton("##row", ImVec2(width, height));
@@ -3255,27 +3221,28 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     ImVec2 bbMin = pos, bbMax{pos.x+width, pos.y+height};
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Row background
-    ImU32 rowBg = rowHovered ? IM_COL32(20,22,28,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, rowBg, 5.f*s);
-    dl->AddRect(bbMin, bbMax, rowHovered ? IM_COL32(50,52,68,255) : g_pido.elemStroke, 5.f*s, 0, 1.f);
+    // Row background — flat, no individual border
+    ImU32 rowBg = rowHovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
+    dl->AddRectFilled(bbMin, bbMax, rowBg, 2.f*s);
+    // Thin separator at row bottom
+    dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg  = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
     float midY = pos.y + height * 0.5f;
-    dl->AddText(bold, 13.f*s, {pos.x+12.f*s, midY - 6.5f*s}, g_pido.textActive, label, labelEnd);
+    dl->AddText(bold, 12.f*s, {pos.x+8.f*s, midY - 6.f*s}, g_pido.textActive, label, labelEnd);
 
     // Right-side chip showing current selection
     const char* curItem = (*current_item >= 0 && *current_item < items_count) ? items[*current_item] : "";
-    const float chipPadX = 8.f*s, chipPadY = 3.f*s, chipRnd = 4.f*s, arrowW = 10.f*s;
+    const float chipPadX = 7.f*s, chipPadY = 2.f*s, chipRnd = 4.f*s, arrowW = 10.f*s;
     ImVec2 chipSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, curItem);
     float chipW = chipSz.x + chipPadX*2.f + arrowW + 4.f*s;
     float chipH = chipSz.y + chipPadY*2.f;
     float chipX = bbMax.x - chipW - 10.f*s;
     float chipY = midY - chipH*0.5f;
     dl->AddRectFilled({chipX, chipY}, {chipX+chipW, chipY+chipH}, IM_COL32(22,24,32,255), chipRnd);
-    dl->AddRect({chipX, chipY}, {chipX+chipW, chipY+chipH}, g_pido.elemStroke, chipRnd, 0, 1.f);
+    dl->AddRect({chipX, chipY}, {chipX+chipW, chipY+chipH}, WithAlpha(g_pido.accent, 0.35f), chipRnd, 0, 1.f);
     dl->AddText(reg, 11.f*s, {chipX+chipPadX, chipY+chipPadY}, g_pido.text, curItem);
 
     // Open popup on row click
@@ -3294,10 +3261,10 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     ImGui::SetNextWindowPos({pos.x, bbMax.y + 2.f*s});
     ImGui::SetNextWindowSize({width, 0.f});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5.f*s, 5.f*s));
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 4.f*s);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 6.f*s);
     ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.f);
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(40, 40, 40, 245));
-    ImGui::PushStyleColor(ImGuiCol_Border,  IM_COL32(55, 55, 65, 255));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(17, 18, 24, 252));
+    ImGui::PushStyleColor(ImGuiCol_Border,  WithAlpha(g_pido.accent, 0.3f));
 
     bool changed = false;
     if(ImGui::BeginPopup(popupId)){
@@ -3316,10 +3283,9 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
             }
             ImDrawList* pdl = ImGui::GetWindowDrawList();
             if(selected){
-                int ar = (int)(g_accentColor[0]*50), ag = (int)(g_accentColor[1]*50), ab = (int)(g_accentColor[2]*50);
-                pdl->AddRectFilled(ipos, {ipos.x+iw, ipos.y+lineH}, IM_COL32(ar,ag,ab,200), 3.f*s);
+                pdl->AddRectFilled(ipos, {ipos.x+iw, ipos.y+lineH}, WithAlpha(g_pido.accent, 0.22f), 3.f*s);
             } else if(iHov){
-                pdl->AddRectFilled(ipos, {ipos.x+iw, ipos.y+lineH}, IM_COL32(55,55,65,200), 3.f*s);
+                pdl->AddRectFilled(ipos, {ipos.x+iw, ipos.y+lineH}, IM_COL32(255,255,255,8), 3.f*s);
             }
             ImU32 itemCol = selected ? g_pido.accent : (iHov ? g_pido.textActive : g_pido.text);
             pdl->AddText(reg, reg->LegacySize, {ipos.x + 5.f*s, ipos.y + (lineH - reg->LegacySize)*0.5f}, itemCol, items[i]);
@@ -3347,26 +3313,28 @@ static bool PidoColorEdit4(const char* label, const char* desc, float col[4], Im
     bool hovered = ImGui::IsMouseHoveringRect(bbMin, bbMax);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 rowBg = hovered ? IM_COL32(20,22,28,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, rowBg, 5.f*s);
-    dl->AddRect(bbMin, bbMax, hovered ? IM_COL32(50,52,68,255) : g_pido.elemStroke, 5.f*s, 0, 1.f);
+    ImU32 rowBg = hovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
+    dl->AddRectFilled(bbMin, bbMax, rowBg, 2.f*s);
+    // Thin separator at row bottom
+    dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
     float midY = pos.y + height * 0.5f;
     dl->AddText(bold, 13.f*s, {pos.x+12.f*s, midY - 6.5f*s}, g_pido.textActive, label, labelEnd);
 
-    // Color swatch — larger, with checkerboard for alpha, rounded
-    const float swW = 36.f*s, swH = 20.f*s, swRnd = 4.f*s;
+    // Color swatch — square, with checkerboard for alpha, rounded
+    const float swW = 22.f*s, swH = 22.f*s, swRnd = 4.f*s;
     float swX = bbMax.x - swW - 10.f*s;
     float swY = midY - swH*0.5f;
-    // Checkerboard pattern for transparency
+    // Checkerboard pattern for transparency (8 squares in 2 rows of 4)
     ImU32 chk1 = IM_COL32(60,60,60,255), chk2 = IM_COL32(40,40,40,255);
-    float half = swW*0.5f;
-    dl->AddRectFilled({swX,swY},{swX+half,swY+swH*0.5f}, chk1, 0); // top-left
-    dl->AddRectFilled({swX+half,swY},{swX+swW,swY+swH*0.5f}, chk2, 0); // top-right
-    dl->AddRectFilled({swX,swY+swH*0.5f},{swX+half,swY+swH}, chk2, 0); // bot-left
-    dl->AddRectFilled({swX+half,swY+swH*0.5f},{swX+swW,swY+swH}, chk1, 0); // bot-right
+    float cw = swW / 4.f, ch = swH / 2.f;
+    for(int ci=0; ci<4; ci++){
+        float cx2 = swX + ci*cw;
+        dl->AddRectFilled({cx2, swY},      {cx2+cw, swY+ch}, (ci%2==0)?chk1:chk2, 0);
+        dl->AddRectFilled({cx2, swY+ch},   {cx2+cw, swY+swH}, (ci%2==0)?chk2:chk1, 0);
+    }
     // Color overlay
     dl->AddRectFilled({swX,swY},{swX+swW,swY+swH}, IM_COL32((int)(col[0]*255),(int)(col[1]*255),(int)(col[2]*255),(int)(col[3]*255)), swRnd);
     dl->AddRect({swX,swY},{swX+swW,swY+swH}, g_pido.elemStroke, swRnd, 0, 1.f);
@@ -3390,7 +3358,7 @@ static bool PidoInputText(const char* label, const char* desc, char* buf, size_t
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 50.f * s;
+    float height = 34.f * s;
     ImGui::Dummy(ImVec2(width, height));
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
     ImVec2 bbMin = pos;
@@ -3398,19 +3366,19 @@ static bool PidoInputText(const char* label, const char* desc, char* buf, size_t
     bool hovered = ImGui::IsMouseHoveringRect(bbMin, bbMax);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 bg = hovered ? IM_COL32(15,17,20,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, bg, 4.f * s);
-    dl->AddRect(bbMin, bbMax, g_pido.elemStroke, 4.f * s);
+    ImU32 bg = hovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
+    dl->AddRectFilled(bbMin, bbMax, bg, 2.f * s);
+    dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
-    dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
-    if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
+    float labelY = (desc && desc[0]) ? pos.y+2.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
+    dl->AddText(bold, 12.f * s, {pos.x+8.f*s, labelY}, g_pido.textActive, label, labelEnd);
+    if(desc && desc[0]) dl->AddText(reg, 10.f * s, {pos.x+8.f*s, pos.y+14.f*s}, g_pido.textDim, desc);
 
     float inputW = (std::min)(200.f * s, width * 0.55f);
-    ImGui::SetCursorScreenPos({bbMax.x - inputW - 10.f*s, bbMin.y + (height - 24.f*s)*0.5f});
+    ImGui::SetCursorScreenPos({bbMax.x - inputW - 8.f*s, bbMin.y + (height - 22.f*s)*0.5f});
     ImGui::PushItemWidth(inputW);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.f * s);
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::ColorConvertU32ToFloat4(g_pido.elemBg));
@@ -3430,7 +3398,7 @@ static bool PidoInputInt(const char* label, const char* desc, int* v){
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 50.f * s;
+    float height = 34.f * s;
     ImGui::Dummy(ImVec2(width, height));
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
     ImVec2 bbMin = pos;
@@ -3438,19 +3406,19 @@ static bool PidoInputInt(const char* label, const char* desc, int* v){
     bool hovered = ImGui::IsMouseHoveringRect(bbMin, bbMax);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 bg = hovered ? IM_COL32(15,17,20,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, bg, 4.f * s);
-    dl->AddRect(bbMin, bbMax, g_pido.elemStroke, 4.f * s);
+    ImU32 bg = hovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
+    dl->AddRectFilled(bbMin, bbMax, bg, 2.f * s);
+    dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
-    dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
-    if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
+    float labelY = (desc && desc[0]) ? pos.y+2.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
+    dl->AddText(bold, 12.f * s, {pos.x+8.f*s, labelY}, g_pido.textActive, label, labelEnd);
+    if(desc && desc[0]) dl->AddText(reg, 10.f * s, {pos.x+8.f*s, pos.y+14.f*s}, g_pido.textDim, desc);
 
     float inputW = (std::min)(200.f * s, width * 0.55f);
-    ImGui::SetCursorScreenPos({bbMax.x - inputW - 10.f*s, bbMin.y + (height - 24.f*s)*0.5f});
+    ImGui::SetCursorScreenPos({bbMax.x - inputW - 8.f*s, bbMin.y + (height - 22.f*s)*0.5f});
     ImGui::PushItemWidth(inputW);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.f * s);
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::ColorConvertU32ToFloat4(g_pido.elemBg));
@@ -3471,7 +3439,7 @@ static bool PidoKeybind(const char* label, const char* desc, int* key){
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float width = ImGui::GetContentRegionAvail().x;
-    float height = 50.f * s;
+    float height = 34.f * s;
     ImGui::Dummy(ImVec2(width, height));
     ImVec2 nextPos = ImGui::GetCursorScreenPos();
     ImVec2 bbMin = pos;
@@ -3479,19 +3447,19 @@ static bool PidoKeybind(const char* label, const char* desc, int* key){
     bool hovered = ImGui::IsMouseHoveringRect(bbMin, bbMax);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 bg = hovered ? IM_COL32(15,17,20,255) : g_pido.elemBg;
-    dl->AddRectFilled(bbMin, bbMax, bg, 4.f * s);
-    dl->AddRect(bbMin, bbMax, g_pido.elemStroke, 4.f * s);
+    ImU32 bg = hovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
+    dl->AddRectFilled(bbMin, bbMax, bg, 2.f * s);
+    dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
     ImFont* reg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
     const char* labelEnd = LabelTextEnd(label);
-    float labelY = (desc && desc[0]) ? pos.y+6.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
-    dl->AddText(bold, 14.f * s, {pos.x+10.f*s, labelY}, g_pido.textActive, label, labelEnd);
-    if(desc && desc[0]) dl->AddText(reg, 12.f * s, {pos.x+10.f*s, pos.y+26.f*s}, g_pido.textDim, desc);
+    float labelY = (desc && desc[0]) ? pos.y+2.f*s : pos.y + (height - bold->LegacySize*s)*0.5f;
+    dl->AddText(bold, 12.f * s, {pos.x+8.f*s, labelY}, g_pido.textActive, label, labelEnd);
+    if(desc && desc[0]) dl->AddText(reg, 10.f * s, {pos.x+8.f*s, pos.y+14.f*s}, g_pido.textDim, desc);
 
-    float btnW = 80.f * s, btnH = 26.f * s;
-    ImGui::SetCursorScreenPos({bbMax.x - btnW - 10.f*s, bbMin.y + (height - btnH)*0.5f});
+    float btnW = 76.f * s, btnH = 22.f * s;
+    ImGui::SetCursorScreenPos({bbMax.x - btnW - 8.f*s, bbMin.y + (height - btnH)*0.5f});
     const char* btn = (capture == key) ? "..." : KeyName(*key);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.f * s);
     ImGui::PushStyleColor(ImGuiCol_Button, ImGui::ColorConvertU32ToFloat4(g_pido.elemBg));
@@ -3544,14 +3512,25 @@ static void DrawFakeESPPreview(const ImVec2& size, int pos){
     float boxH=s.y*0.6f,boxW=boxH*0.42f;
     ImU32 eCol=IM_COL32((int)(g_espEnemyCol[0]*255),(int)(g_espEnemyCol[1]*255),(int)(g_espEnemyCol[2]*255),255);
     ImU32 tCol=IM_COL32((int)(g_espTeamCol[0]*255),(int)(g_espTeamCol[1]*255),(int)(g_espTeamCol[2]*255),255);
+    const float prvRnd = 3.5f;
     auto drawBox=[&](ImVec2 center,ImU32 col){
         float l=center.x-boxW*0.5f,r=center.x+boxW*0.5f,t=center.y-boxH*0.5f,b=center.y+boxH*0.5f;
         if(g_espBoxStyle==2){
-            dl->AddRectFilled({l,t},{r,b},IM_COL32(20,20,28,120),2.f);
+            dl->AddRectFilled({l,t},{r,b},IM_COL32(20,20,28,140),prvRnd);
+            DrawCornerBox(dl,l,t,r,b,IM_COL32(0,0,0,200),g_espBoxThick+1.f);
             DrawCornerBox(dl,l,t,r,b,col,g_espBoxThick);
         }else if(g_espBoxStyle==1){
-            dl->AddRect({l,t},{r,b},col,0.f,0,g_espBoxThick);
+            dl->AddRect({l,t},{r,b},IM_COL32(0,0,0,200),prvRnd,0,g_espBoxThick+1.f);
+            dl->AddRect({l,t},{r,b},col,prvRnd,0,g_espBoxThick);
+        }else if(g_espBoxStyle==3){
+            DrawOutlineBox(dl,l,t,r,b,col,g_espBoxThick);
+        }else if(g_espBoxStyle==4){
+            DrawCoalBox(dl,l,t,r,b,IM_COL32(0,0,0,200),g_espBoxThick+1.f);
+            DrawCoalBox(dl,l,t,r,b,col,g_espBoxThick);
+        }else if(g_espBoxStyle==5){
+            DrawOutlineCoalBox(dl,l,t,r,b,col,g_espBoxThick);
         }else{
+            DrawCornerBox(dl,l,t,r,b,IM_COL32(0,0,0,200),g_espBoxThick+1.f);
             DrawCornerBox(dl,l,t,r,b,col,g_espBoxThick);
         }
         if(g_espHeadDot){
@@ -3561,8 +3540,9 @@ static void DrawFakeESPPreview(const ImVec2& size, int pos){
             dl->AddCircle({center.x, t+6.f},dotR,col,16,1.0f);
         }
         if(g_espHealth){
-            float barW=4.f;float bx=l-6.f-barW;
-            dl->AddRectFilled({bx,t},{bx+barW,b},IM_COL32(15,15,20,200),2.f);
+            float barW=5.f;float bx=l-8.f-barW;
+            dl->AddRectFilled({bx-1.f,t-1.f},{bx+barW+1.f,b+1.f},IM_COL32(40,42,52,200),3.f);
+            dl->AddRectFilled({bx,t},{bx+barW,b},IM_COL32(10,10,14,220),2.f);
             dl->AddRectFilled({bx,t+boxH*0.3f},{bx+barW,b},HealthCol(70),2.f);
         }
     };
@@ -3584,17 +3564,18 @@ static void DrawMenu(){
     UpdatePidoraisePalette(g_menuAnim);
 
     static int page = g_activeTab;
-    static float tabAlpha = 0.f;
 
     float menuScale = MenuScale();
-    float animScale = LerpF(0.96f, 1.f, g_menuAnim);
-    float menuW = 800.f * menuScale * animScale;
-    float menuH = 520.f * menuScale * animScale;
+    // Ease-out-circ for open animation: snaps open fast, smooth close
+    float animEased = sqrtf(1.f - powf(g_menuAnim - 1.f, 2.f));
+    float animScale = LerpF(0.92f, 1.f, animEased);
+    float menuW = 820.f * menuScale * animScale;
+    float menuH = 540.f * menuScale * animScale;
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
     if(sw<100.f)sw=1920.f; if(sh<100.f)sh=1080.f;
 
     ImGui::SetNextWindowSize(ImVec2(menuW,menuH), ImGuiCond_Always);
-    float slideY = (1.f - g_menuAnim) * 12.f * menuScale;
+    float slideY = (1.f - animEased) * 10.f * menuScale;
     float menuX = (sw - menuW) * 0.5f;
     float menuY = (sh - menuH) * 0.5f + slideY;
     menuX = Clampf(menuX, 0.f, sw - menuW);
@@ -3603,7 +3584,7 @@ static void DrawMenu(){
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, g_menuAnim);
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, animEased);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
@@ -3624,156 +3605,238 @@ static void DrawMenu(){
 
     const float s = menuScale;
     ImGui::SetWindowFontScale(s);
-    const float sidebarW    = 190.f * s;
-    const float menuRounding = 10.f * s;
-    const float pad          = 12.f * s;
-    const float headerH      = 52.f * s;
-
-    // Outer shadow — 3 passes only
-    dl->PushClipRectFullScreen();
-    for(int i=1;i<=3;i++){
-        float spread = i * 5.f * s;
-        dl->AddRectFilled({pos.x-spread, pos.y-spread}, {pos.x+size.x+spread, pos.y+size.y+spread},
-            IM_COL32(0,0,0,(int)(55.f*g_menuAnim/(float)i)), menuRounding + spread);
-    }
-    dl->PopClipRect();
+    const float menuRounding  = 0.f;
+    const float pad           = 10.f * s;
+    const float headerH       = 32.f * s;
+    const float tabBarH       = 26.f * s;
 
     // Main bg
     dl->AddRectFilled(pos, {pos.x+size.x, pos.y+size.y}, g_pido.bgFill, menuRounding);
+    // Accent outer border
+    dl->AddRect(pos, {pos.x+size.x, pos.y+size.y},
+        WithAlpha(g_pido.accent, 0.55f * animEased), menuRounding, 0, 1.f);
+    // Inner border
+    dl->AddRect({pos.x+1.f, pos.y+1.f}, {pos.x+size.x-1.f, pos.y+size.y-1.f},
+        IM_COL32(4, 5, 8, (int)(200.f*animEased)), menuRounding);
 
-    // Sidebar bg
-    dl->AddRectFilled(pos, {pos.x+sidebarW, pos.y+size.y}, g_pido.tabBg, menuRounding, ImDrawFlags_RoundCornersLeft);
-
-    // Outer border
-    dl->AddRect(pos, {pos.x+size.x, pos.y+size.y}, g_pido.bgStroke, menuRounding, 0, 1.f);
-
-    // Sidebar / content divider
-    dl->AddLine({pos.x+sidebarW, pos.y+menuRounding}, {pos.x+sidebarW, pos.y+size.y-menuRounding}, g_pido.elemStroke, 1.f);
-
-    // Header area overlay (subtle darken on top bar)
-    dl->AddRectFilled(pos, {pos.x+size.x, pos.y+headerH},
-        IM_COL32(0,0,0,(int)(28*g_menuAnim)), menuRounding, ImDrawFlags_RoundCornersTop);
-
-    // Header bottom separator
-    dl->AddLine({pos.x+menuRounding, pos.y+headerH}, {pos.x+size.x-menuRounding, pos.y+headerH}, g_pido.elemStroke, 1.f);
-
-    // Accent underline on sidebar header only
-    int ac_r = (int)(g_accentColor[0]*255), ac_g = (int)(g_accentColor[1]*255), ac_b = (int)(g_accentColor[2]*255);
-    dl->AddRectFilled({pos.x+menuRounding, pos.y+headerH-2.f*s}, {pos.x+sidebarW, pos.y+headerH},
-        IM_COL32(ac_r,ac_g,ac_b,(int)(200*g_menuAnim)), 0);
-
-    // Logo
-    if(font::lexend_bold){
-        ImFont* fReg  = font::lexend_regular ? font::lexend_regular : font::lexend_bold;
-        float logoX = pos.x + 15.f*s;
-        float nameY = pos.y + (headerH - 18.f*s) * 0.5f - 2.f*s;
-        // Accent square marker
-        float dotSz = 5.f*s;
-        dl->AddRectFilled({logoX, nameY + (18.f*s-dotSz)*0.5f}, {logoX+dotSz, nameY + (18.f*s+dotSz)*0.5f}, g_pido.accent, 1.5f*s);
-        // Name
-        dl->AddText(font::lexend_bold, 18.f*s, {logoX+dotSz+7.f*s, nameY}, g_pido.textActive, "LITWARE");
-        // Subtitle
-        ImVec2 nameSz = font::lexend_bold->CalcTextSizeA(18.f*s, FLT_MAX, 0.f, "LITWARE");
-        dl->AddText(fReg, 9.f*s, {logoX+dotSz+7.f*s, nameY+nameSz.y+1.f*s},
-            IM_COL32(ac_r,ac_g,ac_b,(int)(160*g_menuAnim)), "internal");
-    }
-
-    ImGui::SetCursorPos({6.f*s, headerH + 6.f*s});
-    ImGui::BeginGroup();
-    const char* tabLabels[] = {"Aimbot","Visuals","World","Skins","Misc"};
-    const char* tabDescs[] = {"","","","",""};
-    // icomoon ASCII map: c=crosshair, b=eye, f=flask, o=skin, e=cog
-    static const char tabIconChars[] = { 'c', 'b', 'f', 'o', 'e' };
-    float tabW = sidebarW - 8.f*s;
-    for(int i=0;i<5;++i){
-        char iconBuf[2] = { tabIconChars[i], '\0' };
-        if(PidoTab(iconBuf, tabLabels[i], tabDescs[i], page==i, tabW)) page = i;
-    }
-    ImGui::EndGroup();
-
-    // Sidebar footer
+    // Watermark-style gradient stripe at top (blue→purple→gold→teal, 3 segments)
     {
-        ImFont* fReg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
-        const char* hint = "INSERT  \xc2\xb7  toggle";
-        ImVec2 hSz = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, hint);
-        dl->AddText(fReg, 9.f*s, {pos.x + (sidebarW - hSz.x)*0.5f, pos.y + size.y - 16.f*s},
-            IM_COL32(80,85,100,(int)(100*g_menuAnim)), hint);
+        const float gy0 = pos.y + 1.f, gy1 = pos.y + 3.f;
+        float gx0 = pos.x + 2.f, gx1 = pos.x + size.x - 2.f;
+        float w = gx1 - gx0;
+        float gq1 = gx0 + w * 0.33f, gq2 = gx0 + w * 0.66f;
+        auto fa = [&](ImU32 c) -> ImU32 { return WithAlpha(c, animEased); };
+        dl->AddRectFilledMultiColor({gx0,gy0},{gq1,gy1},
+            fa(IM_COL32(108,132,188,220)), fa(IM_COL32(174,122,190,220)),
+            fa(IM_COL32(174,122,190,220)), fa(IM_COL32(108,132,188,220)));
+        dl->AddRectFilledMultiColor({gq1,gy0},{gq2,gy1},
+            fa(IM_COL32(174,122,190,220)), fa(IM_COL32(194,166,118,220)),
+            fa(IM_COL32(194,166,118,220)), fa(IM_COL32(174,122,190,220)));
+        dl->AddRectFilledMultiColor({gq2,gy0},{gx1,gy1},
+            fa(IM_COL32(194,166,118,220)), fa(IM_COL32(116,168,148,220)),
+            fa(IM_COL32(116,168,148,220)), fa(IM_COL32(194,166,118,220)));
     }
 
-    tabAlpha = LerpF(tabAlpha, (page==g_activeTab)?1.f:0.f, io.DeltaTime*15.f);
-    if(tabAlpha < 0.01f) g_activeTab = page;
+    // Header bottom separator + tab bar divider
+    dl->AddLine({pos.x, pos.y+headerH}, {pos.x+size.x, pos.y+headerH},
+        WithAlpha(g_pido.elemStroke, animEased), 1.f);
+    float tabBarTop2 = pos.y + size.y - tabBarH;
+    dl->AddRectFilled({pos.x, tabBarTop2}, {pos.x+size.x, pos.y+size.y}, g_pido.tabBg, 0.f);
+    dl->AddLine({pos.x, tabBarTop2}, {pos.x+size.x, tabBarTop2},
+        WithAlpha(g_pido.elemStroke, animEased), 1.f);
 
-    float slide = (1.f - tabAlpha) * 100.f * s;
-    float contentX = sidebarW + pad;
-    float contentY = pad + slide;
-    float contentW = size.x - sidebarW - pad*2.f;
-    float contentH = size.y - pad*2.f;
-    float childW = (contentW - pad) * 0.5f;
-    float rightX = contentX + childW + pad;
+    // Header
+    {
+        ImFont* fBold = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
+        ImFont* fReg  = font::lexend_regular ? font::lexend_regular : fBold;
+        float midH = pos.y + headerH * 0.5f;
+        ImU32 dimFaded = WithAlpha(g_pido.textDim, animEased);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, g_menuAnim * tabAlpha);
+        // "litware" centered
+        const char* title = "litware";
+        const float tSize = 15.f * s;
+        ImVec2 szT = fBold->CalcTextSizeA(tSize, FLT_MAX, 0.f, title);
+        dl->AddText(fBold, tSize, {pos.x + (size.x - szT.x)*0.5f, midH - szT.y*0.5f},
+            WithAlpha(g_pido.textActive, animEased), title);
+
+        // Left: version + date
+        const char* verBuf  = "v0.2.0";
+        const char* dateBuf = "release: 21.03.2026";
+        ImVec2 szVer  = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, verBuf);
+        ImVec2 szDate = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, dateBuf);
+        float lx = pos.x + 12.f*s;
+        dl->AddText(fReg, 9.f*s, {lx, midH - szVer.y*0.5f},
+            WithAlpha(g_pido.textActive, animEased), verBuf);
+        lx += szVer.x + 6.f*s;
+        dl->AddCircleFilled({lx, midH}, 1.3f*s, dimFaded, 8);
+        lx += 6.f*s;
+        dl->AddText(fReg, 9.f*s, {lx, midH - szDate.y*0.5f}, dimFaded, dateBuf);
+
+        // Right: fps  •  time
+        SYSTEMTIME st{}; GetLocalTime(&st);
+        char timeBuf[12], fpsBuf2[16];
+        std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", st.wHour, st.wMinute);
+        std::snprintf(fpsBuf2, sizeof(fpsBuf2), "%.0f fps", io.Framerate);
+        ImVec2 szTime2 = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, timeBuf);
+        ImVec2 szFps2  = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, fpsBuf2);
+        float rx = pos.x + size.x - 12.f*s;
+        rx -= szFps2.x;
+        dl->AddText(fReg, 9.f*s, {rx, midH - szFps2.y*0.5f}, dimFaded, fpsBuf2);
+        rx -= 8.f*s;
+        dl->AddCircleFilled({rx, midH}, 1.3f*s, dimFaded, 8);
+        rx -= szTime2.x + 8.f*s;
+        dl->AddText(fReg, 9.f*s, {rx, midH - szTime2.y*0.5f}, dimFaded, timeBuf);
+    }
+    // Bottom tab bar
+    {
+        const char* tabLabels2[] = {"Aimbot","Visuals","World","Skins","Misc"};
+        ImFont* fTabReg = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
+        float tabBarTop = pos.y + size.y - tabBarH;
+        float eachW = size.x / 5.f;
+        for(int i=0;i<5;i++){
+            float tx = pos.x + i*eachW;
+            ImGui::SetCursorScreenPos({tx, tabBarTop});
+            ImGui::InvisibleButton(tabLabels2[i], ImVec2(eachW, tabBarH));
+            if(ImGui::IsItemClicked()) page=i;
+            bool tabSel=(page==i);
+            float fpx=tabSel?11.f*s:10.f*s;
+            ImU32 tCol=tabSel?WithAlpha(g_pido.accent,animEased):WithAlpha(g_pido.textDim,animEased);
+            ImVec2 tSz=fTabReg->CalcTextSizeA(fpx,FLT_MAX,0.f,tabLabels2[i]);
+            float tlx=tx+(eachW-tSz.x)*0.5f;
+            float tly=tabBarTop+(tabBarH-tSz.y)*0.5f;
+            dl->AddText(fTabReg,fpx,{tlx,tly},tCol,tabLabels2[i]);
+            if(tabSel)
+                dl->AddLine({tlx, tabBarTop+tabBarH-2.f*s},
+                            {tlx+tSz.x, tabBarTop+tabBarH-2.f*s},
+                            WithAlpha(g_pido.accent,animEased), 1.5f*s);
+            if(i>0)
+                dl->AddLine({tx, tabBarTop+5.f*s}, {tx, tabBarTop+tabBarH-5.f*s},
+                    WithAlpha(g_pido.elemStroke, animEased * 0.6f));
+        }
+    }
+
+    // Instant tab switch — no fade animation on section change
+    if(page != g_activeTab){
+        g_grpGeneration++;
+        g_activeTab = page;
+    }
+    const float tabAlphaEased = 1.f;
+
+    float contentX = pad;
+    float contentY = headerH + pad;
+    float contentW = size.x - pad*2.f;
+    float contentH = (std::max)(80.f*s, size.y - headerH - tabBarH - pad*2.f);
+    const float gap  = 6.f * s;
+    float childW = (contentW - gap) * 0.5f;
+    float rightX = contentX + childW + gap;
+    auto grpH = [&](int rows) -> float {
+        return rows * g_skeetUi.rowHeight * s + 30.f * s;
+    };
+
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, animEased * tabAlphaEased);
 
     if(g_activeTab==0){
+        // Left: Aimbot group (full height)
         ImGui::SetCursorPos({contentX, contentY});
-        BeginPidoChild("##aim_full", ImVec2(contentW, contentH));
-        PidoSection("Aimbot");
+        BeginPidoGroup("##g_aim", "Aimbot", {childW, contentH});
         PidoToggle("Enable","", &g_aimbotEnabled);
         if(g_aimbotEnabled){
-        PidoSliderFloat("FOV","", &g_aimbotFov, 1.f, 90.f, "%.1f");
-        PidoSliderFloat("Smooth","", &g_aimbotSmooth, 1.f, 30.f, "%.1f");
-        const char* bones[]={"Head","Neck","Chest","Multi"};
-        PidoCombo("Bone","", &g_aimbotBone, bones, IM_ARRAYSIZE(bones));
-        PidoKeybind("Aimbot key","", &g_aimbotKey);
-        PidoToggle("FOV circle","", &g_fovCircleEnabled);
-        if(g_fovCircleEnabled) PidoColorEdit4("FOV color","", g_fovCircleCol);
-        PidoToggle("Autostop","", &g_autostopEnabled);
+            PidoSliderFloat("FOV","", &g_aimbotFov, 1.f, 90.f, "%.1f");
+            PidoSliderFloat("Smooth","", &g_aimbotSmooth, 1.f, 30.f, "%.1f");
+            const char* bones[]={"Head","Neck","Chest","Multi"};
+            PidoCombo("Bone","", &g_aimbotBone, bones, IM_ARRAYSIZE(bones));
+            PidoKeybind("Aimbot key","", &g_aimbotKey);
+            PidoToggle("FOV circle","", &g_fovCircleEnabled);
+            if(g_fovCircleEnabled) PidoColorEdit4("FOV color","", g_fovCircleCol);
+            PidoToggle("Autostop","", &g_autostopEnabled);
         }
-        PidoSection("Triggerbot");
+        EndPidoGroup();
+
+        // Right top: Triggerbot
+        float tbH  = contentH * 0.50f - gap * 0.5f;
+        float rcsH = contentH - tbH - gap;
+        ImGui::SetCursorPos({rightX, contentY});
+        BeginPidoGroup("##g_tb", "Triggerbot", {childW, tbH});
         PidoToggle("Enable##tb","", &g_tbEnabled);
         PidoSliderInt("Delay (ms)","", &g_tbDelay, 0, 300);
         PidoKeybind("Trigger key","", &g_tbKey);
-        PidoSection("Recoil Control");
+        EndPidoGroup();
+
+        // Right bottom: Recoil Control
+        ImGui::SetCursorPos({rightX, contentY + tbH + gap});
+        BeginPidoGroup("##g_rcs", "Recoil Control", {childW, rcsH});
         PidoToggle("Enable##rcs","", &g_rcsEnabled);
         PidoSliderFloat("X axis","", &g_rcsX, 0.f, 2.f, "%.2f");
         PidoSliderFloat("Y axis","", &g_rcsY, 0.f, 2.f, "%.2f");
         PidoSliderFloat("Smooth##rcs","", &g_rcsSmooth, 1.f, 20.f, "%.1f");
-        EndPidoChild();
+        EndPidoGroup();
     }else if(g_activeTab==1){
+        // Left: ESP group with sub-sections (Box / Labels / Extra)
         ImGui::SetCursorPos({contentX, contentY});
-        BeginPidoChild("##vis_left", ImVec2(childW, contentH));
-        PidoSection("ESP");
+        BeginPidoGroup("##g_esp", "ESP", {childW, contentH});
         PidoToggle("Enable##esp","", &g_espEnabled);
         if(g_safeMode){ ImGui::SameLine(); if(ImGui::Button("Retry##esp2")) g_safeMode=false; }
-        PidoToggle("Only visible","", &g_espOnlyVis);
-        PidoToggle("Teammates","", &g_espShowTeam);
-        const char* boxItems[]={"Corner","Full","Corner Fill","Outline","Coal","Outline Coal"};
-        PidoCombo("Box","", &g_espBoxStyle, boxItems, IM_ARRAYSIZE(boxItems));
-        PidoColorEdit4("Enemy","", g_espEnemyCol);
-        PidoColorEdit4("Team","", g_espTeamCol);
-        PidoToggle("Name","", &g_espName);
-        PidoToggle("Health","", &g_espHealth);
-        if(g_espHealth){ const char* hStyles[]={"Gradient","Solid"}; PidoCombo("Health style","", &g_espHealthStyle, hStyles, 2); if(g_espHealthStyle==0){ PidoColorEdit4("HP full","", g_espHealthGradientCol1); PidoColorEdit4("HP empty","", g_espHealthGradientCol2); } }
-        PidoToggle("Distance","", &g_espDist);
-        PidoToggle("Head dot","", &g_espHeadDot);
-        PidoToggle("OOF arrows","", &g_espOof);
-        if(g_espOof) PidoSliderFloat("OOF size","", &g_espOofSize, 12.f, 48.f, "%.0f");
-        PidoToggle("Lines","", &g_espLines);
-        if(g_espLines){ const char* lineAnchors[]={"Top","Middle","Bottom"}; PidoCombo("Line anchor","", &g_espLineAnchor, lineAnchors, 3); }
-        PidoToggle("Weapon","", &g_espWeapon);
-        PidoToggle("Weapon icon","", &g_espWeaponIcon);
-        PidoToggle("Ammo bar","", &g_espAmmo);
-        if(g_espAmmo){ const char* aStyles[]={"Gradient","Solid"}; PidoCombo("Ammo style","", &g_espAmmoStyle, aStyles, 2); if(g_espAmmoStyle==0){ PidoColorEdit4("Ammo empty","", g_espAmmoCol1); PidoColorEdit4("Ammo full","", g_espAmmoCol2); } }
-        PidoToggle("Money","", &g_espMoney);
-        PidoSliderFloat("Box thick","", &g_espBoxThick, 0.5f, 4.f, "%.1f");
-        if(g_espName) PidoSliderFloat("Name size","", &g_espNameSize, 10.f, 18.f, "%.1f");
-        EndPidoChild();
+        PidoSection("Box");
+        {
+            PidoToggle("Draw box","", &g_espDrawBox);
+            const char* boxItems[]={"Corner","Full","Corner Fill","Outline","Coal","Outline Coal"};
+            PidoCombo("Style","", &g_espBoxStyle, boxItems, IM_ARRAYSIZE(boxItems));
+            PidoSliderFloat("Thickness","", &g_espBoxThick, 0.5f, 4.f, "%.1f");
+            PidoColorEdit4("Enemy color","", g_espEnemyCol);
+            PidoColorEdit4("Team color","", g_espTeamCol);
+        }
+        PidoSection("Labels");
+        {
+            PidoToggle("Name","", &g_espName);
+            if(g_espName) PidoSliderFloat("Name size","", &g_espNameSize, 10.f, 18.f, "%.1f");
+            PidoToggle("Health","", &g_espHealth);
+            if(g_espHealth){
+                const char* hStyles[]={"Gradient","Solid"};
+                PidoCombo("Health style","", &g_espHealthStyle, hStyles, 2);
+                if(g_espHealthStyle==0){
+                    PidoColorEdit4("HP full","", g_espHealthGradientCol1);
+                    PidoColorEdit4("HP empty","", g_espHealthGradientCol2);
+                }
+            }
+            PidoToggle("Distance","", &g_espDist);
+            PidoToggle("Money","", &g_espMoney);
+            PidoToggle("Weapon","", &g_espWeapon);
+            PidoToggle("Weapon icon","", &g_espWeaponIcon);
+        }
+        PidoSection("Extra");
+        {
+            PidoToggle("Only visible","", &g_espOnlyVis);
+            PidoToggle("Teammates","", &g_espShowTeam);
+            PidoToggle("Head dot","", &g_espHeadDot);
+            PidoToggle("OOF arrows","", &g_espOof);
+            if(g_espOof) PidoSliderFloat("OOF size","", &g_espOofSize, 12.f, 48.f, "%.0f");
+            PidoToggle("Lines","", &g_espLines);
+            if(g_espLines){ const char* lineAnchors[]={"Top","Middle","Bottom"}; PidoCombo("Line anchor","", &g_espLineAnchor, lineAnchors, 3); }
+            PidoToggle("Ammo bar","", &g_espAmmo);
+            if(g_espAmmo){
+                const char* aStyles[]={"Gradient","Solid"};
+                PidoCombo("Ammo style","", &g_espAmmoStyle, aStyles, 2);
+                if(g_espAmmoStyle==0){
+                    PidoColorEdit4("Ammo empty","", g_espAmmoCol1);
+                    PidoColorEdit4("Ammo full","", g_espAmmoCol2);
+                }
+            }
+            PidoToggle("Damage numbers","", &g_damageFloatersEnabled);
+            if(g_damageFloatersEnabled){
+                PidoSliderFloat("Dmg duration","", &g_damageFloaterDuration, 0.35f, 2.f, "%.2f");
+                PidoSliderFloat("Dmg scale","", &g_damageFloaterScale, 0.5f, 2.f, "%.2f");
+                const char* anchItems[]={"Head","Chest"};
+                PidoCombo("Dmg anchor","", &g_damageFloaterAnchor, anchItems, 2);
+            }
+        }
+        EndPidoGroup();
+
+        // Right column: Effects + Sound stacked
+        float effectsH = contentH * 0.58f - gap * 0.5f;
+        float soundH   = contentH - effectsH - gap;
 
         ImGui::SetCursorPos({rightX, contentY});
-        BeginPidoChild("##vis_right", ImVec2(childW, contentH));
-        PidoSection("Preview");
-        DrawFakeESPPreview(ImVec2(childW-20.f*s, 120.f*s), 0);
-        ImGui::Spacing();
-        PidoSection("Effects");
+        BeginPidoGroup("##g_effects", "Effects", {childW, effectsH});
         PidoToggle("No flash","", &g_noFlash);
         PidoToggle("No smoke","", &g_noSmoke);
         PidoToggle("Glow","", &g_glowEnabled);
@@ -3782,11 +3845,19 @@ static void DrawMenu(){
             PidoColorEdit4("Glow team","", g_glowTeamCol);
             PidoSliderFloat("Glow alpha","", &g_glowAlpha, 0.2f, 1.0f, "%.2f");
         }
-        // PidoSection("Chams"); // temporarily disabled
-        // PidoToggle("Enable##chams","", &g_chamsEnabled);
-        // if(g_chamsEnabled){ ... }
-        ImGui::Spacing();
-        PidoSection("Sound");
+        PidoToggle("Hitmarker","", &g_hitmarkerEnabled);
+        if(g_hitmarkerEnabled){
+            PidoSliderFloat("Hitmarker time","", &g_hitmarkerDuration, 0.15f, 1.2f, "%.2f");
+            const char* hmStyles[]={"Cross","X"};
+            PidoCombo("Hitmarker style","", &g_hitmarkerStyle, hmStyles, 2);
+            PidoToggle("Center cross","", &g_hitmarkerCenter);
+            PidoToggle("At hit (screen)","", &g_hitmarkerWorldAtHit);
+        }
+        PidoToggle("Hit sparks (3D)","", &g_hitmarkerHitParticles);
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({rightX, contentY + effectsH + gap});
+        BeginPidoGroup("##g_sound", "Sound", {childW, soundH});
         PidoToggle("Sound pings","", &g_soundEnabled);
         if(g_soundEnabled){
             PidoSliderFloat("Scale","", &g_soundPuddleScale, 0.5f, 2.5f, "%.2f");
@@ -3795,14 +3866,21 @@ static void DrawMenu(){
             PidoToggle("Teammates","", &g_soundBlipTeam);
             PidoColorEdit4("Color","", g_soundBlipCol);
         }
-        EndPidoChild();
+        EndPidoGroup();
     }else if(g_activeTab==2){
         ImGui::SetCursorPos({contentX, contentY});
-        BeginPidoChild("##world_full", ImVec2(contentW, contentH));
-        PidoSection("World");
+        BeginPidoGroup("##g_world", "World", {childW, contentH});
         PidoToggle("Sky color","", &g_skyColorEnabled);
         if(g_skyColorEnabled) PidoColorEdit4("Sky##col","", g_skyColor);
-        PidoSection("Particles");
+        PidoToggle("Night mode (sky)","", &g_skyNightMode);
+        if(g_skyNightMode) PidoSliderFloat("Night blend","", &g_skyNightStrength, 0.f, 1.f, "%.2f");
+        ImGui::Spacing();
+        ImGui::TextDisabled("Sky hook tints skybox only.");
+        ImGui::TextDisabled("Full-scene night needs fog/ambient/post offsets (IDA).");
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({rightX, contentY});
+        BeginPidoGroup("##g_part", "Particles", {childW, contentH});
         PidoToggle("Snow","", &g_snowEnabled);
         if(g_snowEnabled) PidoSliderInt("Density","", &g_snowDensity, 0, 2);
         PidoToggle("Sakura","", &g_sakuraEnabled);
@@ -3816,24 +3894,26 @@ static void DrawMenu(){
             PidoSliderFloat("Wind","", &g_particlesWind, 0.f, 60.f, "%.0f");
             PidoSliderFloat("Depth fade","", &g_particlesDepthFade, 0.0005f, 0.01f, "%.4f");
         }
-        EndPidoChild();
+        EndPidoGroup();
     }else if(g_activeTab==3){
+        // Left: Skins toggle group
+        float skinsGroupH = grpH(3);
         ImGui::SetCursorPos({contentX, contentY});
-        BeginPidoChild("##skins_full", ImVec2(contentW, contentH));
-        PidoSection("Skins");
+        BeginPidoGroup("##g_skins", "Skins", {childW, skinsGroupH});
         PidoToggle("Enable","", &g_skinEnabled);
         PidoToggle("Active weapon only","", &g_skinActiveOnly);
         if(PidoButton("Force update", ImVec2(0, 0))) g_skinForceUpdate = true;
-        ImGui::Spacing();
-        PidoSection("Override");
+        EndPidoGroup();
+
+        // Right: Override group (full height)
+        ImGui::SetCursorPos({rightX, contentY});
+        BeginPidoGroup("##g_override", "Override", {childW, contentH});
         static const int kSkinWeaponIds[] = {
             1,2,3,4,7,8,9,10,11,13,14,16,17,19,24,25,26,27,28,29,30,32,33,34,35,36,38,39,40,42,59,60,61,63,64
         };
         const int weaponCount = IM_ARRAYSIZE(kSkinWeaponIds);
         if(g_skinSelectedWeapon < 0 || g_skinSelectedWeapon >= weaponCount) g_skinSelectedWeapon = 0;
         int selId = kSkinWeaponIds[g_skinSelectedWeapon];
-        WeaponInfo selInfo = WeaponInfoForId(selId);
-        const char* preview = selInfo.name ? selInfo.name : "Weapon";
         {
             static const char* s_wnames[35];
             for(int i = 0; i < weaponCount; i++){
@@ -3877,46 +3957,58 @@ static void DrawMenu(){
         }
         {
             char overrideBuf[32]; std::snprintf(overrideBuf, sizeof(overrideBuf), "Overrides: %d", (int)g_skinOverrides.size());
-            float s2 = MenuScale();
             ImFont* reg2 = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
             ImVec2 p2 = ImGui::GetCursorScreenPos();
-            ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, 18.f*s2));
-            ImGui::GetWindowDrawList()->AddText(reg2, 11.f*s2, {p2.x+10.f*s2, p2.y+2.f*s2}, g_pido.textDim, overrideBuf);
+            ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, 18.f*s));
+            ImGui::GetWindowDrawList()->AddText(reg2, 11.f*s, {p2.x+10.f*s, p2.y+2.f*s}, g_pido.textDim, overrideBuf);
         }
-        EndPidoChild();
+        EndPidoGroup();
     }else if(g_activeTab==4){
         static int s_lastConfigTabFrame = -1;
         if(s_lastConfigTabFrame != ImGui::GetFrameCount()){ s_lastConfigTabFrame = ImGui::GetFrameCount(); RefreshConfigList(); }
+
+        // Left column: Movement + Radar + HUD stacked
+        float movH   = grpH(2);
+        float radH   = grpH(1);
+        float hudH   = contentH - movH - radH - gap * 2.f;
+
         ImGui::SetCursorPos({contentX, contentY});
-        BeginPidoChild("##misc_left", ImVec2(childW, contentH));
-        PidoSection("Movement");
+        BeginPidoGroup("##g_move", "Movement", {childW, movH});
         PidoToggle("Bunny hop","", &g_bhopEnabled);
         PidoToggle("Strafe helper","", &g_strafeEnabled);
-        PidoSection("Radar");
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({contentX, contentY + movH + gap});
+        BeginPidoGroup("##g_radar", "Radar", {childW, radH});
         PidoToggle("In-game radar","", &g_radarIngame);
-        PidoSection("HUD");
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({contentX, contentY + movH + radH + gap * 2.f});
+        BeginPidoGroup("##g_hud", "HUD", {childW, hudH});
         PidoToggle("Bomb timer","", &g_bombTimerEnabled);
         PidoToggle("Watermark","", &g_watermarkEnabled);
         PidoToggle("Spectator list","", &g_spectatorListEnabled);
         PidoToggle("Keybinds","", &g_keybindsEnabled);
-        EndPidoChild();
+        EndPidoGroup();
+
+        // Right column: View + Config stacked
+        float viewH   = grpH(2);
+        float configH = contentH - viewH - gap;
 
         ImGui::SetCursorPos({rightX, contentY});
-        BeginPidoChild("##misc_right", ImVec2(childW, contentH));
-        PidoSection("View");
+        BeginPidoGroup("##g_view", "View", {childW, viewH});
         PidoToggle("FOV changer","", &g_fovEnabled);
         PidoSliderFloat("FOV","", &g_fovValue, 70.f, 130.f, "%.0f");
-        PidoSection("Config");
-        const char* themes[] = {"Dark Pro","Glass","Neumo"};
-        PidoCombo("Menu theme","", &g_menuTheme, themes, IM_ARRAYSIZE(themes));
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({rightX, contentY + viewH + gap});
+        BeginPidoGroup("##g_config", "Config", {childW, configH});
         PidoSliderFloat("Menu opacity","", &g_menuOpacity, 0.6f, 1.0f, "%.2f");
         PidoSliderFloat("Menu anim","", &g_menuAnimSpeed, 4.f, 20.f, "%.1f");
-        PidoColorEdit4("Accent color","", g_accentColor);
-        PidoSliderFloat("Esp scale","", &g_espScale, 0.7f, 1.5f, "%.2f");
+        PidoSliderFloat("ESP scale","", &g_espScale, 0.7f, 1.5f, "%.2f");
         PidoSliderFloat("Menu scale","", &g_uiScale, 0.85f, 1.6f, "%.2f");
         PidoInputText("Config name","", g_configName, sizeof(g_configName));
         static int g_configListSel = -1;
-        const char* cfgPreview = g_configList.empty() ? "(no configs)" : (g_configListSel >= 0 && g_configListSel < (int)g_configList.size() ? g_configList[g_configListSel].c_str() : "Select config...");
         if(!g_configList.empty()){
             std::vector<const char*> cfgPtrs;
             cfgPtrs.reserve(g_configList.size());
@@ -3926,16 +4018,15 @@ static void DrawMenu(){
                 strncpy_s(g_configName, sizeof(g_configName), g_configList[g_configListSel].c_str(), _TRUNCATE);
             }
         }
-        float s3 = MenuScale();
-        float btnW = (ImGui::GetContentRegionAvail().x - 8.f*s3) / 4.f;
+        float btnW = (ImGui::GetContentRegionAvail().x - 8.f*s) / 4.f;
         if(PidoButton("Save",    ImVec2(btnW, 0))){ if(SaveConfig(g_configName)) RefreshConfigList(); }
-        ImGui::SameLine(0, 4.f*s3);
+        ImGui::SameLine(0, 4.f*s);
         if(PidoButton("Load",    ImVec2(btnW, 0))) LoadConfig(g_configName);
-        ImGui::SameLine(0, 4.f*s3);
+        ImGui::SameLine(0, 4.f*s);
         if(PidoButton("Refresh", ImVec2(btnW, 0))) RefreshConfigList();
-        ImGui::SameLine(0, 4.f*s3);
+        ImGui::SameLine(0, 4.f*s);
         if(PidoButton("Reset",   ImVec2(btnW, 0))) ApplyDefaults();
-        EndPidoChild();
+        EndPidoGroup();
     }
 
     ImGui::PopStyleVar();
@@ -3948,13 +4039,36 @@ static void DrawMenu(){
 
 static void DrawKeybindsWindow(){
     if(!g_keybindsEnabled || !g_keybindsWindowOpen) return;
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(16/255.f,16/255.f,16/255.f,245/255.f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(64/255.f,64/255.f,64/255.f,220/255.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.f);
     ImGui::SetNextWindowSize({320.f,300.f},ImGuiCond_Always);
     ImGui::Begin("Keybinds",nullptr,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoCollapse);
+    ImDrawList* wdl = ImGui::GetWindowDrawList();
+    ImVec2 wp = ImGui::GetWindowPos();
+    ImVec2 ws = ImGui::GetWindowSize();
+    wdl->AddRect({wp.x+1.f,wp.y+1.f},{wp.x+ws.x-1.f,wp.y+ws.y-1.f}, IM_COL32(8,8,8,210), 6.f, 0, 1.f);
+    ImVec2 cr0 = ImGui::GetWindowContentRegionMin();
+    float cw = ImGui::GetWindowContentRegionMax().x - cr0.x;
+    float yTop = wp.y + cr0.y + 2.f;
+    float gx0 = wp.x + cr0.x + 2.f;
+    float gq1 = gx0 + cw * 0.33f;
+    float gq2 = gx0 + cw * 0.66f;
+    float gx1 = wp.x + cr0.x + cw - 2.f;
+    wdl->AddRectFilledMultiColor({gx0,yTop},{gq1,yTop+3.f},
+        IM_COL32(108,132,188,220), IM_COL32(174,122,190,220), IM_COL32(174,122,190,220), IM_COL32(108,132,188,220));
+    wdl->AddRectFilledMultiColor({gq1,yTop},{gq2,yTop+3.f},
+        IM_COL32(174,122,190,220), IM_COL32(194,166,118,220), IM_COL32(194,166,118,220), IM_COL32(174,122,190,220));
+    wdl->AddRectFilledMultiColor({gq2,yTop},{gx1,yTop+3.f},
+        IM_COL32(194,166,118,220), IM_COL32(116,168,148,220), IM_COL32(116,168,148,220), IM_COL32(194,166,118,220));
     KeyBindWidget("Aimbot key",&g_aimbotKey);
     KeyBindWidget("Triggerbot key",&g_tbKey);
     KeyBindWidget("DT key",&g_dtKey);
     KeyBindWidget("Strafe key",&g_strafeKey);
     ImGui::End();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 }
 
 static constexpr int MAX_PARTICLES = 1500;
@@ -3975,6 +4089,31 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             g_particles.push_back(p);
         }
         g_pendingKillParticles=false;
+    }
+    if(g_pendingHitParticles && vm && g_hitmarkerHitParticles){
+        ImU32 sparkCol = IM_COL32(255, 210, 90, 240);
+        for(int i = 0; i < 22 && (int)g_particles.size() < MAX_PARTICLES; i++){
+            Particle p{};
+            p.type = 5;
+            p.color = sparkCol;
+            p.worldPos = g_lastHitParticlePos;
+            p.is3D = true;
+            float theta = Randf(0.f, 6.2831853f);
+            float phi = Randf(0.25f, 1.35f);
+            float spd = Randf(140.f, 320.f);
+            float vx = spd * sinf(phi) * cosf(theta);
+            float vy = spd * sinf(phi) * sinf(theta);
+            float vz = Randf(80.f, 220.f);
+            p.worldVel = {vx, vy, vz};
+            p.size = Randf(0.8f, 2.2f);
+            p.maxlife = Randf(0.12f, 0.32f);
+            p.lifetime = p.maxlife;
+            p.phase = Randf(0.f, 6.28f);
+            p.rot = Randf(0.f, 6.28f);
+            p.spin = Randf(-6.f, 6.f);
+            g_particles.push_back(p);
+        }
+        g_pendingHitParticles = false;
     }
     static float snowAcc=0.f,sakuraAcc=0.f,starAcc=0.f;
     int snowRate=(g_snowDensity==0?25:(g_snowDensity==1?60:120));
@@ -4051,18 +4190,25 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             if(p.type==1){p.worldVel.z -= 5.f * dt;}
             if(p.type==2 || p.type==3){/* twinkle only */}
             if(p.type==4){p.worldVel.z -= 12.f * dt;}
+            if(p.type==5){
+                p.worldVel.z -= 540.f * dt;
+                p.worldVel.x *= (1.f - 1.4f * dt);
+                p.worldVel.y *= (1.f - 1.4f * dt);
+            }
 
             float baseZ = g_localOrigin.z + worldFloor;
             float topZ = baseZ + worldHeight;
             if(p.type==4){
                 if(p.worldPos.z < baseZ) p.lifetime = 0.f;
+            }else if(p.type==5){
+                if(p.worldPos.z < baseZ - 10.f) p.lifetime = 0.f;
             }else if(p.worldPos.z < baseZ){
                 p.worldPos.z = topZ + Randf(0.f, worldHeight*0.15f);
                 p.worldPos.x = g_localOrigin.x;
                 p.worldPos.y = g_localOrigin.y;
                 spawnWorld(p);
             }
-            if(p.type!=4){
+            if(p.type!=4 && p.type!=5){
             float dx = p.worldPos.x - g_localOrigin.x;
             float dy = p.worldPos.y - g_localOrigin.y;
             float dist2 = dx*dx + dy*dy;
@@ -4112,6 +4258,11 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             ImU32 core = WithAlpha(p.color, alpha);
             dl->AddCircleFilled({x,y},size*1.4f,soft,12);
             dl->AddCircleFilled({x,y},size,core,12);
+        }else if(p.type==5){
+            ImU32 soft = WithAlpha(p.color, alpha*0.55f);
+            ImU32 core = WithAlpha(p.color, alpha);
+            dl->AddCircleFilled({x,y}, size * 2.0f, soft, 10);
+            dl->AddCircleFilled({x,y}, size * 0.85f, core, 10);
         }else{
             float tw = 0.4f + 0.6f * (sinf(p.phase*2.f + p.rot)*0.5f + 0.5f);
             ImU32 col = WithAlpha(p.color, alpha * tw);
@@ -4122,17 +4273,8 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
     }
 }
 
-static void DrawHitmarker(float sw, float sh){
-    if(!g_hitmarkerEnabled || !g_lastHitmarkerTime) return;
-    UINT64 elapsed = GetTickCount64() - g_lastHitmarkerTime;
-    float durMs = g_hitmarkerDuration * 1000.f;
-    if(elapsed >= (UINT64)durMs) { g_lastHitmarkerTime = 0; return; }
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-    if(!dl) return;
-    float t = 1.f - (float)elapsed / durMs;
-    float alpha = t;
-    float len = 8.f + 6.f * t;
-    float cx = sw * 0.5f, cy = sh * 0.5f;
+static void DrawHitmarkerCross(ImDrawList* dl, float cx, float cy, float alpha){
+    float len = 8.f + 6.f * alpha;
     ImU32 col = IM_COL32(255,255,255,(int)(220*alpha));
     ImU32 outline = IM_COL32(0,0,0,(int)(120*alpha));
     if(g_hitmarkerStyle == 0){
@@ -4143,6 +4285,66 @@ static void DrawHitmarker(float sw, float sh){
         dl->AddLine({cx-len*0.7f,cy-len*0.7f},{cx+len*0.7f,cy+len*0.7f},col,1.5f);
         dl->AddLine({cx-len*0.7f,cy+len*0.7f},{cx+len*0.7f,cy-len*0.7f},outline,2.5f);
         dl->AddLine({cx-len*0.7f,cy+len*0.7f},{cx+len*0.7f,cy-len*0.7f},col,1.5f);
+    }
+}
+
+static void DrawDamageFloaters(float sw, float sh){
+    (void)sh;
+    if(g_damageFloaters.empty()) return;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    if(!dl) return;
+    ImFont* fb = font::lexend_bold ? font::lexend_bold : ImGui::GetFont();
+    UINT64 now = GetTickCount64();
+    float baseSize = 18.f * g_damageFloaterScale;
+    for(auto it = g_damageFloaters.begin(); it != g_damageFloaters.end(); ){
+        float elapsed = (float)(now - it->spawnMs) / 1000.f;
+        if(elapsed >= it->duration || !std::isfinite(it->ax) || !std::isfinite(it->ay)){
+            it = g_damageFloaters.erase(it);
+            continue;
+        }
+        float u = elapsed / it->duration;
+        float ease = 1.f - (1.f - u) * (1.f - u);
+        float yo = -ease * 72.f * g_damageFloaterScale;
+        float pop = 1.f + 0.28f * (1.f - ease) * (1.f - ease);
+        float alpha = 1.f - u * u * 0.88f;
+        float dm = Clampf((float)it->damage / 100.f, 0.f, 1.f);
+        ImU32 fill = IM_COL32(
+            (int)LerpF(255.f, 255.f, dm),
+            (int)LerpF(255.f, 140.f, dm),
+            (int)LerpF(200.f, 70.f, dm),
+            (int)(255.f * alpha));
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%d", it->damage);
+        float fs = baseSize * pop;
+        ImVec2 ts = fb->CalcTextSizeA(fs, FLT_MAX, 0.f, buf);
+        float px = it->ax - ts.x * 0.5f;
+        float py = it->ay + yo;
+        dl->AddText(fb, fs, {px+2.f, py+2.f}, IM_COL32(0,0,0,(int)(200*alpha)), buf);
+        dl->AddText(fb, fs, {px+1.f, py}, IM_COL32(0,0,0,(int)(255*alpha)), buf);
+        dl->AddText(fb, fs, {px, py}, fill, buf);
+        ++it;
+    }
+}
+
+static void DrawHitmarker(float sw, float sh){
+    if(!g_hitmarkerEnabled || !g_lastHitmarkerTime) return;
+    UINT64 elapsed = GetTickCount64() - g_lastHitmarkerTime;
+    float durMs = g_hitmarkerDuration * 1000.f;
+    if(elapsed >= (UINT64)durMs){
+        g_lastHitmarkerTime = 0;
+        g_hitmarkerHasScreenPos = false;
+        return;
+    }
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    if(!dl) return;
+    float t = 1.f - (float)elapsed / durMs;
+    float alpha = t;
+    if(g_hitmarkerCenter)
+        DrawHitmarkerCross(dl, sw * 0.5f, sh * 0.5f, alpha);
+    if(g_hitmarkerWorldAtHit && g_hitmarkerHasScreenPos){
+        float m = 20.f;
+        if(g_hitmarkerScreenX >= -m && g_hitmarkerScreenX <= sw + m && g_hitmarkerScreenY >= -m && g_hitmarkerScreenY <= sh + m)
+            DrawHitmarkerCross(dl, g_hitmarkerScreenX, g_hitmarkerScreenY, alpha * 0.92f);
     }
 }
 
@@ -4174,11 +4376,28 @@ static void DrawNotifications(float dt,float sw,float sh){
         float w=240.f;
         float h=22.f;
         ImU32 col=IM_COL32((n.color>>IM_COL32_R_SHIFT)&0xFF,(n.color>>IM_COL32_G_SHIFT)&0xFF,(n.color>>IM_COL32_B_SHIFT)&0xFF,(int)(255*alpha));
-        ImU32 bg=IM_COL32(18,18,24,(int)(200*alpha));
-        dl->AddRectFilled({x,y},{x+w,y+h},bg,6.f);
+        ImU32 bgTint=IM_COL32(16,16,16,(int)(245*alpha));
+        ImU32 brTint=IM_COL32(64,64,64,(int)(220*alpha));
+        ImU32 inTint=IM_COL32(8,8,8,(int)(210*alpha));
+        dl->PushClipRect({x,y},{x+w,y+h},true);
+        dl->AddRectFilled({x,y},{x+w,y+h},bgTint,6.f);
+        dl->AddRect({x,y},{x+w,y+h},brTint,6.f,0,1.f);
+        dl->AddRect({x+1.f,y+1.f},{x+w-1.f,y+h-1.f},inTint,6.f,0,1.f);
+        float gy1=y+(std::min)(3.f,h*0.25f);
+        if(gy1>y+1.2f){
+            float gq1=x+w*0.33f,gq2=x+w*0.66f;
+            dl->AddRectFilledMultiColor({x+2.f,y+1.f},{gq1,gy1},
+                IM_COL32(108,132,188,(int)(220*alpha)), IM_COL32(174,122,190,(int)(220*alpha)), IM_COL32(174,122,190,(int)(220*alpha)), IM_COL32(108,132,188,(int)(220*alpha)));
+            dl->AddRectFilledMultiColor({gq1,y+1.f},{gq2,gy1},
+                IM_COL32(174,122,190,(int)(220*alpha)), IM_COL32(194,166,118,(int)(220*alpha)), IM_COL32(194,166,118,(int)(220*alpha)), IM_COL32(174,122,190,(int)(220*alpha)));
+            dl->AddRectFilledMultiColor({gq2,y+1.f},{x+w-2.f,gy1},
+                IM_COL32(194,166,118,(int)(220*alpha)), IM_COL32(116,168,148,(int)(220*alpha)), IM_COL32(116,168,148,(int)(220*alpha)), IM_COL32(194,166,118,(int)(220*alpha)));
+        }
+        dl->PopClipRect();
         dl->AddRectFilled({x,y},{x+3.f,y+h},col,6.f,ImDrawFlags_RoundCornersLeft);
-        dl->AddText({x+10.f,y+3.f},IM_COL32(0,0,0,(int)(160*alpha)),n.text);
-        dl->AddText({x+9.f,y+2.f},col,n.text);
+        ImFont* nf = font::lexend_regular ? font::lexend_regular : ImGui::GetFont();
+        dl->AddText(nf, nf->LegacySize, {x+10.f,y+3.f},IM_COL32(0,0,0,(int)(160*alpha)),n.text);
+        dl->AddText(nf, nf->LegacySize, {x+9.f,y+2.f},col,n.text);
         idx++;
     }
     g_notifs.erase(std::remove_if(g_notifs.begin(), g_notifs.end(), [](const Notification& n){return n.lifetime<=0.f;}), g_notifs.end());
@@ -4219,92 +4438,60 @@ static void DrawWatermark(float sw){
 
     SYSTEMTIME st{}; GetLocalTime(&st);
     char timeBuf[16]; std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", st.wHour, st.wMinute);
-
     const float fps    = io.Framerate;
-    const float padX   = 14.f;
-    const float padY   = 8.f;
-    const float rnd    = 8.f;
-    const float accentBarH = 2.f;
-    const float dotR   = 2.f;
-
-    const ImU32 colBg     = IM_COL32(10, 10, 12, 245);
-    const ImU32 colBorder = IM_COL32(38, 38, 48, 255);
-    const ImU32 colAccent = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),255);
-    const ImU32 colText   = IM_COL32(220, 225, 235, 255);
-    const ImU32 colDim    = IM_COL32(110, 115, 130, 255);
-    const ImU32 colDot    = IM_COL32(55, 58, 70, 255);
-
-    // FPS color: green >120, yellow >60, red <=60
-    ImU32 colFps;
-    if     (fps > 120.f) colFps = IM_COL32(80, 210, 120, 255);
-    else if(fps >  60.f) colFps = IM_COL32(230, 185, 60, 255);
-    else                 colFps = IM_COL32(220, 70, 70, 255);
-
-    // Measure text
-    const char* label = "LITWARE";
-    ImVec2 szLabel = fBold->CalcTextSizeA(fBold->LegacySize, FLT_MAX, 0.f, label);
+    const float padX   = 8.f;
+    const float padY   = 4.f;
+    const float dotR   = 1.5f;
+    const char* label = "litware";
     char fpsBuf[16]; std::snprintf(fpsBuf, sizeof(fpsBuf), "%.0f", fps);
-    char fpsUnit[] = "fps";
-    ImVec2 szFpsNum  = fReg->CalcTextSizeA(fReg->LegacySize, FLT_MAX, 0.f, fpsBuf);
-    ImVec2 szFpsUnit = fReg->CalcTextSizeA(fReg->LegacySize, FLT_MAX, 0.f, fpsUnit);
-    ImVec2 szTime    = fReg->CalcTextSizeA(fReg->LegacySize, FLT_MAX, 0.f, timeBuf);
+    const char* pingBuf = "ping 0";
 
-    const float innerGap = 10.f;
-    const float dotDiam  = dotR * 2.f;
+    ImVec2 szLabel = fBold->CalcTextSizeA(12.f, FLT_MAX, 0.f, label);
+    ImVec2 szFps   = fReg->CalcTextSizeA(11.f, FLT_MAX, 0.f, fpsBuf);
+    ImVec2 szTime  = fReg->CalcTextSizeA(11.f, FLT_MAX, 0.f, timeBuf);
+    ImVec2 szPing  = fReg->CalcTextSizeA(11.f, FLT_MAX, 0.f, pingBuf);
 
-    float totalW = szLabel.x;
-    if(g_showFpsWatermark){
-        totalW += innerGap + dotDiam + innerGap;   // dot
-        totalW += szFpsNum.x + 2.f + szFpsUnit.x; // "120fps"
-        totalW += innerGap + dotDiam + innerGap;   // dot
-        totalW += szTime.x;
-    }
+    float contentW = szLabel.x + 8.f + szFps.x + 8.f + szTime.x + 8.f + szPing.x + 20.f;
+    float barW = (std::max)(170.f, contentW + padX * 2.f);
+    float barH = (std::max)({szLabel.y, szFps.y, szTime.y, szPing.y}) + padY * 2.f;
+    float x = sw - barW - 12.f;
+    float y = 12.f;
 
-    float barH = (std::max)({szLabel.y, szFpsNum.y, szTime.y}) + padY * 2.f;
-    float barW = totalW + padX * 2.f;
-    barW = (std::max)(barW, 120.f);
+    const ImU32 colBg = IM_COL32(16,16,16,245);
+    const ImU32 colBorder = IM_COL32(64,64,64,220);
+    const ImU32 colInner = IM_COL32(8,8,8,210);
+    const ImU32 colAccent = IM_COL32(220,220,220,255);
+    const ImU32 colText = IM_COL32(220,220,220,255);
+    const ImU32 colDim = IM_COL32(140,140,140,255);
 
-    float x = sw - barW - 15.f;
-    float y = 15.f;
+    dl->AddRectFilled({x,y},{x+barW,y+barH}, colBg, 2.f);
+    dl->AddRect({x,y},{x+barW,y+barH}, colBorder, 2.f, 0, 1.f);
+    dl->AddRect({x+1.f,y+1.f},{x+barW-1.f,y+barH-1.f}, colInner, 2.f, 0, 1.f);
+    float gx0 = x + 2.f;
+    float gy0 = y + 1.f;
+    float gy1 = y + 3.f;
+    float gq1 = x + barW * 0.33f;
+    float gq2 = x + barW * 0.66f;
+    float gx1 = x + barW - 2.f;
+    dl->AddRectFilledMultiColor({gx0,gy0},{gq1,gy1},
+        IM_COL32(108,132,188,220), IM_COL32(174,122,190,220), IM_COL32(174,122,190,220), IM_COL32(108,132,188,220));
+    dl->AddRectFilledMultiColor({gq1,gy0},{gq2,gy1},
+        IM_COL32(174,122,190,220), IM_COL32(194,166,118,220), IM_COL32(194,166,118,220), IM_COL32(174,122,190,220));
+    dl->AddRectFilledMultiColor({gq2,gy0},{gx1,gy1},
+        IM_COL32(194,166,118,220), IM_COL32(116,168,148,220), IM_COL32(116,168,148,220), IM_COL32(194,166,118,220));
 
-    // Shadow
-    dl->AddRectFilled({x-3.f, y-3.f}, {x+barW+3.f, y+barH+3.f}, IM_COL32(0,0,0,60), rnd+2.f);
-
-    // Background + border
-    dl->AddRectFilled({x, y}, {x+barW, y+barH}, colBg, rnd);
-    dl->AddRect({x, y}, {x+barW, y+barH}, colBorder, rnd, 0, 1.f);
-
-    // Accent line bottom
-    dl->AddRectFilled({x+rnd, y+barH-accentBarH}, {x+barW-rnd, y+barH}, colAccent, accentBarH*0.5f);
-
-    // Draw contents
-    float cx   = x + padX;
-    float midY = y + barH * 0.5f;
-
-    // "LITWARE" in accent, bold
-    dl->AddText(fBold, fBold->LegacySize, {cx, midY - szLabel.y * 0.5f}, colAccent, label);
-    cx += szLabel.x;
-
-    if(g_showFpsWatermark){
-        // dot separator
-        cx += innerGap;
-        dl->AddCircleFilled({cx + dotR, midY}, dotR, colDot);
-        cx += dotDiam + innerGap;
-
-        // fps number (colored) + "fps" unit (dim)
-        dl->AddText(fReg, fReg->LegacySize, {cx, midY - szFpsNum.y * 0.5f}, colFps, fpsBuf);
-        cx += szFpsNum.x + 2.f;
-        dl->AddText(fReg, fReg->LegacySize, {cx, midY - szFpsUnit.y * 0.5f}, colDim, fpsUnit);
-        cx += szFpsUnit.x;
-
-        // dot separator
-        cx += innerGap;
-        dl->AddCircleFilled({cx + dotR, midY}, dotR, colDot);
-        cx += dotDiam + innerGap;
-
-        // time
-        dl->AddText(fReg, fReg->LegacySize, {cx, midY - szTime.y * 0.5f}, colText, timeBuf);
-    }
+    float cx = x + padX;
+    float midY = y + barH*0.5f;
+    dl->AddText(fBold, 12.f, {cx, midY - szLabel.y*0.5f}, colAccent, label);
+    cx += szLabel.x + 8.f;
+    dl->AddCircleFilled({cx, midY}, dotR, colDim); cx += 6.f;
+    dl->AddText(fReg, 11.f, {cx, midY - szFps.y*0.5f}, colText, fpsBuf);
+    cx += szFps.x + 8.f;
+    dl->AddCircleFilled({cx, midY}, dotR, colDim); cx += 6.f;
+    dl->AddText(fReg, 11.f, {cx, midY - szTime.y*0.5f}, colDim, timeBuf);
+    cx += szTime.x + 8.f;
+    dl->AddCircleFilled({cx, midY}, dotR, colDim); cx += 6.f;
+    dl->AddText(fReg, 11.f, {cx, midY - szPing.y*0.5f}, colDim, pingBuf);
 }
 
 static void DrawNoCrosshair(float sw,float sh){
@@ -4371,8 +4558,8 @@ static void DrawCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,
 }
 // Outline box: triple outline (Weave/Pidoraise style)
 static void DrawOutlineBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick){
-    dl->AddRect({l-1.f,t-1.f},{r+1.f,b+1.f},IM_COL32(0,0,0,255),0.f,0,thick+1.f);
-    dl->AddRect({l+1.f,t+1.f},{r-1.f,b-1.f},IM_COL32(0,0,0,255),0.f,0,thick);
+    dl->AddRect({l-1.f,t-1.f},{r+1.f,b+1.f},IM_COL32(0,0,0,(int)(235)),0.f,0,thick+1.f);
+    dl->AddRect({l+1.f,t+1.f},{r-1.f,b-1.f},IM_COL32(0,0,0,(int)(130)),0.f,0,thick);
     dl->AddRect({l,t},{r,b},col,0.f,0,thick);
 }
 // Outline coal: coal box with black outline (Andromeda style)
@@ -4509,38 +4696,39 @@ static void DrawESP(){
         float bw=br-bl,bh=bb-bt2,cx=(bl+br)*0.5f;
         ImU32 boxCol=IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(alpha*255));
         ImU32 dimCol=IM_COL32(160,160,170,(int)(180*alpha));
-        ImU32 accent=IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(200*alpha));
         float belowY = bb + 3.f * s;
-        // Shadow + glow layers (ESP)
-        dl->AddRectFilled({bl+3.f,bt2+3.f},{br+3.f,bb+3.f},IM_COL32(0,0,0,(int)(45*alpha)));
-        dl->AddRectFilled({bl+2.f,bt2+2.f},{br+2.f,bb+2.f},IM_COL32(0,0,0,(int)(50*alpha)));
-        for(int g=4;g>=1;g--){
-            int r=(boxCol>>IM_COL32_R_SHIFT)&0xFF,g_=(boxCol>>IM_COL32_G_SHIFT)&0xFF,b=(boxCol>>IM_COL32_B_SHIFT)&0xFF;
-            int ga=(g==4)?50:(g==3)?35:(g==2)?20:10;
-            dl->AddRect({bl-(float)g,bt2-(float)g},{br+(float)g,bb+(float)g},IM_COL32(r,g_,b,(int)(ga*alpha)),0.f,0,1.5f);
-        }
-        if(g_espBoxStyle==0){
-            DrawCornerBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),boxThick+1.0f);
-            DrawCornerBox(dl,bl,bt2,br,bb,boxCol,boxThick);
-        }
-        else if(g_espBoxStyle==1){
-            dl->AddRect({bl,bt2},{br,bb},IM_COL32(0,0,0,(int)(200*alpha)),0.f,0,boxThick+1.0f);
-            dl->AddRect({bl,bt2},{br,bb},boxCol,0.f,0,boxThick);
-        }
-        else if(g_espBoxStyle==2){
-            dl->AddRectFilled({bl,bt2},{br,bb},IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(35*alpha)));
-            DrawCornerBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),boxThick+1.0f);
-            DrawCornerBox(dl,bl,bt2,br,bb,boxCol,boxThick);
-        }
-        else if(g_espBoxStyle==3){
-            DrawOutlineBox(dl,bl,bt2,br,bb,boxCol,boxThick);
-        }
-        else if(g_espBoxStyle==4){
-            DrawCoalBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),boxThick+1.0f);
-            DrawCoalBox(dl,bl,bt2,br,bb,boxCol,boxThick);
-        }
-        else if(g_espBoxStyle==5){
-            DrawOutlineCoalBox(dl,bl,bt2,br,bb,boxCol,boxThick);
+        const float boxRnd = 3.5f * s;
+        if(g_espDrawBox){
+            dl->AddRectFilled({bl+4.f,bt2+4.f},{br+4.f,bb+4.f},IM_COL32(0,0,0,(int)(34*alpha)),boxRnd+1.5f);
+            dl->AddRectFilled({bl+2.f,bt2+2.f},{br+2.f,bb+2.f},IM_COL32(0,0,0,(int)(48*alpha)),boxRnd+0.5f);
+            for(int g=3;g>=1;g--){
+                int r=(boxCol>>IM_COL32_R_SHIFT)&0xFF,g_=(boxCol>>IM_COL32_G_SHIFT)&0xFF,b=(boxCol>>IM_COL32_B_SHIFT)&0xFF;
+                int ga=(g==3)?30:(g==2)?16:7;
+                dl->AddRect({bl-(float)g,bt2-(float)g},{br+(float)g,bb+(float)g},IM_COL32(r,g_,b,(int)(ga*alpha)),0.f,0,1.15f);
+            }
+            if(g_espBoxStyle==0){
+                DrawCornerBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),boxThick+1.0f);
+                DrawCornerBox(dl,bl,bt2,br,bb,boxCol,boxThick);
+            }
+            else if(g_espBoxStyle==1){
+                dl->AddRect({bl,bt2},{br,bb},IM_COL32(0,0,0,(int)(200*alpha)),boxRnd,0,boxThick+1.0f);
+                dl->AddRect({bl,bt2},{br,bb},boxCol,boxRnd,0,boxThick);
+            }
+            else if(g_espBoxStyle==2){
+                dl->AddRectFilled({bl,bt2},{br,bb},IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(42*alpha)),boxRnd);
+                DrawCornerBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),boxThick+1.0f);
+                DrawCornerBox(dl,bl,bt2,br,bb,boxCol,boxThick);
+            }
+            else if(g_espBoxStyle==3){
+                DrawOutlineBox(dl,bl,bt2,br,bb,boxCol,boxThick);
+            }
+            else if(g_espBoxStyle==4){
+                DrawCoalBox(dl,bl,bt2,br,bb,IM_COL32(0,0,0,(int)(200*alpha)),boxThick+1.0f);
+                DrawCoalBox(dl,bl,bt2,br,bb,boxCol,boxThick);
+            }
+            else if(g_espBoxStyle==5){
+                DrawOutlineCoalBox(dl,bl,bt2,br,bb,boxCol,boxThick);
+            }
         }
         if(g_espHealth&&e.health>0){
             float fill=Clampf((float)e.health/100.f,0.f,1.f),barW=5.f*s,barOff=8.f*s,barRound=4.f*s;
@@ -4644,8 +4832,9 @@ else if(g_espHealthPos==1){
             float sx=(float)g_esp_screen_w*0.5f,sh=(float)g_esp_screen_h;
             float sy = (g_espLineAnchor==0) ? 0.f : ((g_espLineAnchor==2) ? sh : sh*0.5f);
             int r=(int)(ecol[0]*255),g_=(int)(ecol[1]*255),b=(int)(ecol[2]*255);
-            for(int gl=3;gl>=1;gl--) dl->AddLine({sx+(float)gl,sy+(float)gl},{e.feet_x+(float)gl,e.feet_y+(float)gl},IM_COL32(0,0,0,(int)(40*alpha/(float)gl)),(1.2f+(float)gl*0.3f)*s);
-            dl->AddLine({sx,sy},{e.feet_x,e.feet_y},IM_COL32(r,g_,b,(int)(100*alpha)),0.8f*s);
+            for(int gl=3;gl>=1;gl--) dl->AddLine({sx+(float)gl,sy+(float)gl},{e.feet_x+(float)gl,e.feet_y+(float)gl},IM_COL32(0,0,0,(int)(48*alpha/(float)gl)),(1.35f+(float)gl*0.32f)*s);
+            dl->AddLine({sx,sy},{e.feet_x,e.feet_y},IM_COL32(r,g_,b,(int)(150*alpha)),1.05f*s);
+            dl->AddLine({sx,sy},{e.feet_x,e.feet_y},IM_COL32(255,255,255,(int)(36*alpha)),0.5f*s);
         }
         if(g_espSkeleton){
             ImU32 scol=IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(180*alpha));
@@ -4699,32 +4888,41 @@ else if(g_espHealthPos==1){
             ImFont* font = espFont;
             float nameSize = g_espNameSize * s;
             ImVec2 ts=font->CalcTextSizeA(nameSize,FLT_MAX,0.f,e.name);
-            float padX = 6.f * s, padY = 3.f * s;
-            float tx=cx-ts.x*0.5f,ty=bt2-ts.y-6.f*s;
+            float padX = 7.f * s, padY = 4.f * s;
+            float tx=cx-ts.x*0.5f,ty=bt2-ts.y-7.f*s;
             ImVec2 bgMin{tx - padX, ty - padY};
             ImVec2 bgMax{tx + ts.x + padX, ty + ts.y + padY};
-            dl->AddRectFilled(bgMin, bgMax, IM_COL32(12,12,16,(int)(140*alpha)), 4.f * s);
-            dl->AddRect(bgMin, bgMax, IM_COL32(0,0,0,(int)(200*alpha)), 4.f * s);
-            dl->AddRectFilled({bgMin.x, bgMax.y - 1.f*s}, {bgMax.x, bgMax.y}, accent, 3.f*s);
-            for(int glow=3;glow>=1;glow--){
-                float o=(float)glow; int glowA=(int)(60*alpha/(float)glow);
+            float nameRnd = 5.f * s;
+            dl->AddRectFilled(bgMin, bgMax, IM_COL32(16,17,24,(int)(172*alpha)), nameRnd);
+            dl->AddRect(bgMin, bgMax, IM_COL32(255,255,255,(int)(24*alpha)), nameRnd, 0, 1.f);
+            dl->AddRectFilled({bgMin.x+2.f, bgMax.y-2.f}, {bgMax.x-2.f, bgMax.y-0.5f},
+                IM_COL32((int)(ecol[0]*255),(int)(ecol[1]*255),(int)(ecol[2]*255),(int)(185*alpha)), 2.f);
+            for(int glow=2;glow>=1;glow--){
+                float o=(float)glow; int glowA=(int)(48*alpha/(float)glow);
                 dl->AddText(font,nameSize,{tx+o,ty},IM_COL32(0,0,0,glowA),e.name);
                 dl->AddText(font,nameSize,{tx-o,ty},IM_COL32(0,0,0,glowA),e.name);
             }
-            dl->AddText(font,nameSize,{tx+1.f,ty+1.f},IM_COL32(0,0,0,(int)(150*alpha)),e.name);
-            dl->AddText(font,nameSize,{tx,ty},IM_COL32(220,220,230,(int)(alpha*255)),e.name);
+            dl->AddText(font,nameSize,{tx+1.f,ty+1.f},IM_COL32(0,0,0,(int)(140*alpha)),e.name);
+            dl->AddText(font,nameSize,{tx,ty},IM_COL32(234,236,244,(int)(alpha*255)),e.name);
         }
         if(e.planting||e.flashed||e.scoped||e.defusing||e.hasBomb||e.hasKits){
             ImFont* sf = espFont;
-            float tagX = br + 8.f * s;  // draw status tags to the right of the box
+            float tagX = br + 8.f * s;
             float tagY = bt2;
             float tagSize = 10.f * s;
-            ImU32 tagCol = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(200*alpha));
+            ImU32 tagCol = IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(220*alpha));
             auto drawTag=[&](const char* t){
-                for(int sh=2;sh>=1;sh--) dl->AddText(sf,tagSize,{tagX+(float)sh,tagY+(float)sh},IM_COL32(0,0,0,(int)(90*alpha/(float)sh)),t);
-                dl->AddText(sf,tagSize,{tagX+1.f,tagY+1.f},IM_COL32(0,0,0,(int)(140*alpha)),t);
-                dl->AddText(sf,tagSize,{tagX,tagY},tagCol,t);
-                tagY+=12.f * s;
+                ImVec2 tsz = sf->CalcTextSizeA(tagSize, FLT_MAX, 0.f, t);
+                float padX = 5.f * s, padY = 2.f * s, chipR = 3.f * s;
+                float px = tagX, py = tagY;
+                float chipW = tsz.x + padX * 2.f, chipH = tsz.y + padY * 2.f;
+                dl->AddRectFilled({px,py},{px+chipW,py+chipH},IM_COL32(14,16,22,(int)(210*alpha)),chipR);
+                dl->AddRect({px,py},{px+chipW,py+chipH},IM_COL32((int)(g_accentColor[0]*255),(int)(g_accentColor[1]*255),(int)(g_accentColor[2]*255),(int)(72*alpha)),chipR,0,1.f);
+                float ttx = px + padX, tty = py + padY;
+                for(int sh=2;sh>=1;sh--) dl->AddText(sf,tagSize,{ttx+(float)sh,tty+(float)sh},IM_COL32(0,0,0,(int)(85*alpha/(float)sh)),t);
+                dl->AddText(sf,tagSize,{ttx+1.f,tty+1.f},IM_COL32(0,0,0,(int)(130*alpha)),t);
+                dl->AddText(sf,tagSize,{ttx,tty},tagCol,t);
+                tagY += chipH + 3.f * s;
             };
             if(e.planting){ drawTag("Planting"); }
             if(e.scoped){ drawTag("Scoped"); }
@@ -4787,7 +4985,7 @@ else if(g_espHealthPos==1){
             const char* iconText = nullptr;
             char iconBuf[5] = {};
             if(g_espWeaponIcon){
-                ImFontBaked* gunBaked = font::gun_icons ? font::gun_icons->GetFontBaked(font::gun_icons->LegacySize) : nullptr;
+                ImFontBaked* gunBaked = font::gun_icons ? font::gun_icons->GetFontBaked(wepSize) : nullptr;
                 if(gunBaked && winfo.iconChar && gunBaked->FindGlyphNoFallback(winfo.iconChar)){
                     WCharToUtf8(winfo.iconChar, iconBuf);
                     iconText = iconBuf;
@@ -4865,7 +5063,10 @@ else if(g_espHealthPos==1){
             belowY += ts.y + 2.f * s;
         }
         if(g_espSpotted&&e.spotted){
-            dl->AddCircleFilled({br+6.f,bt2+6.f},3.f,IM_COL32(90,220,130,(int)(200*alpha)));
+            ImVec2 sp{br+7.f*s, bt2+7.f*s};
+            dl->AddCircle(sp,4.2f*s,IM_COL32(45,140,85,(int)(200*alpha)),12,1.25f);
+            dl->AddCircleFilled(sp,2.4f*s,IM_COL32(110,255,155,(int)(235*alpha)),12);
+            dl->AddCircle(sp,4.2f*s,IM_COL32(200,255,220,(int)(90*alpha)),12,0.85f);
         }
     };
     for(int i=0;i<g_esp_count;i++) drawOne(g_esp_players[i], 1.f);
@@ -5009,15 +5210,22 @@ static void InitImGui(IDXGISwapChain*sc){
     }
     io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NoMouseCursorChange;
     io.ConfigErrorRecoveryEnableAssert=false;  // avoid crash on SetCursorPos/SetCursorScreenPos boundary (Pido)
-    ImFontConfig fc{};fc.SizePixels=17.f;fc.FontDataOwnedByAtlas=false;
-    font::lexend_bold = io.Fonts->AddFontFromMemoryTTF((void*)lexend_bold, (int)sizeof(lexend_bold), 17.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
-    fc.SizePixels=14.f;
-    font::lexend_regular = io.Fonts->AddFontFromMemoryTTF((void*)lexend_regular, (int)sizeof(lexend_regular), 14.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
+    ImFontConfig fc{};fc.SizePixels=13.f;fc.FontDataOwnedByAtlas=false;
+    // Verdana Bold 13px — clean, readable, premium feel
+    font::lexend_bold = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdanab.ttf", 13.f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+    if(!font::lexend_bold)
+        font::lexend_bold = io.Fonts->AddFontFromMemoryTTF((void*)lexend_bold, (int)sizeof(lexend_bold), 13.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
+    fc.SizePixels=12.f;
+    // Verdana Regular 12px
+    font::lexend_regular = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdana.ttf", 12.f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+    if(!font::lexend_regular)
+        font::lexend_regular = io.Fonts->AddFontFromMemoryTTF((void*)lexend_regular, (int)sizeof(lexend_regular), 12.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
     font::esp_mono = io.Fonts->AddFontFromMemoryTTF((void*)jetbrains_mono_regular, (int)sizeof(jetbrains_mono_regular), 14.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
     fc.SizePixels=20.f;
-    font::icomoon = io.Fonts->AddFontFromMemoryTTF((void*)icomoon, (int)sizeof(icomoon), 20.f, &fc, io.Fonts->GetGlyphRangesDefault());
+    static const ImWchar icomoonRanges[] = { 0x0020, 0x00FF, 0xE000, 0xE0FF, 0 };
+    font::icomoon = io.Fonts->AddFontFromMemoryTTF((void*)icomoon, (int)sizeof(icomoon), 20.f, &fc, icomoonRanges);
     fc.SizePixels=15.f;
-    font::icomoon_widget = io.Fonts->AddFontFromMemoryTTF((void*)icomoon_widget, (int)sizeof(icomoon_widget), 15.f, &fc, io.Fonts->GetGlyphRangesDefault());
+    font::icomoon_widget = io.Fonts->AddFontFromMemoryTTF((void*)icomoon_widget, (int)sizeof(icomoon_widget), 15.f, &fc, icomoonRanges);
     static const ImWchar gunRanges[] = { 0xE000, 0xE0FF, 0 };
     ImFontConfig gunCfg = fc;
     gunCfg.SizePixels = 16.f;
@@ -5091,6 +5299,7 @@ static void RequestUnload(){
 }
 static void RenderFrame(IDXGISwapChain*sc){
     if(g_unloading)return;
+    g_swapChain = sc;
     if(!g_firstFrame){DebugLog("[LitWare] first Present");g_firstFrame=true;g_telegramNoteStart=GetTickCount64();}
     if(!g_imguiInitialized){InitImGui(sc);if(!g_imguiInitialized)return;}
     EnsureClientHooks();
@@ -5151,6 +5360,7 @@ static void RenderFrame(IDXGISwapChain*sc){
         DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); }
     DrawLogs(io.DeltaTime, sw, sh);
     DrawHitmarker(sw, sh);
+    DrawDamageFloaters(sw, sh);
     DrawNotifications(io.DeltaTime, sw, sh);
     DrawWatermark(sw);
     ImGui::Render();
@@ -5310,15 +5520,25 @@ static void __fastcall HookDrawSceneObject(void* a1, void* a2, void* a3, int a4,
 }
 
 static void __fastcall HookDrawSkyboxArray(void* a1, void* a2, void* draw_primitive, int count, void* a5, void* a6, void* a7){
-    if(g_skyColorEnabled && draw_primitive && count > 0 && count < 100){
+    // Sky tint only; full-scene night (fog/ambient/post) would need extra hooks + IDA offsets — experimental follow-up.
+    const bool wantSkyTint = g_skyColorEnabled || g_skyNightMode;
+    if(wantSkyTint && draw_primitive && count > 0 && count < 100){
         __try{
             size_t offset = (size_t)(count * 0x68) - 0x50;
             void** skybox_obj_ptr = (void**)((char*)draw_primitive + offset);
             if(skybox_obj_ptr && *skybox_obj_ptr){
                 float* color_ptr = (float*)((char*)(*skybox_obj_ptr) + 0x100);
-                color_ptr[0] = g_skyColor[0];
-                color_ptr[1] = g_skyColor[1];
-                color_ptr[2] = g_skyColor[2];
+                float r = g_skyColor[0], g = g_skyColor[1], b = g_skyColor[2];
+                if(g_skyNightMode){
+                    float nt = Clampf(g_skyNightStrength, 0.f, 1.f);
+                    const float nr = 0.04f, ng = 0.05f, nb = 0.14f;
+                    r = r * (1.f - nt) + nr * nt;
+                    g = g * (1.f - nt) + ng * nt;
+                    b = b * (1.f - nt) + nb * nt;
+                }
+                color_ptr[0] = r;
+                color_ptr[1] = g;
+                color_ptr[2] = b;
             }
         }__except(EXCEPTION_EXECUTE_HANDLER){}
     }
@@ -5342,7 +5562,7 @@ static void* __fastcall HookFirstPersonLegs(void* a1, void* a2, void* a3, void* 
 }
 
 static void EnsureSceneHooks(){
-    bool needSky = g_skyColorEnabled;
+    bool needSky = g_skyColorEnabled || g_skyNightMode;
     if(g_drawSceneHooked && (!needSky || g_drawSkyHooked)){
         g_sceneHooksReady = true;
         return;
