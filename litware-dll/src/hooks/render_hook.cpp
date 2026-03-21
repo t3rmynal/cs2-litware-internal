@@ -184,11 +184,14 @@ static bool g_strafeEnabled = false;
 static int g_strafeKey = 0;
 // Anti-aim, edge jump, autopeek removed
 static bool g_nightModeOverlay = false;  // dark fullscreen overlay (ImGui layer)
-static bool g_hitmarkerWasHeadshot = false;  // last hit was headshot (for gold color)
 static bool g_fovEnabled = false;
 static float g_fovValue = 121.f;
 static bool g_thirdPerson = false;
-static bool g_autostopEnabled = false;  // stop when shooting for accuracy
+static bool g_autostopEnabled = false;  // counter-strafe stop before first shot
+static bool g_waitAimThenFire = false;   // block +attack until aimbot on-target (with aim key)
+static float g_waitAimFovDeg = 2.5f;     // max angle delta to count as "locked"
+static float g_aimbotLastBestFov = 1e9f;
+static bool g_aimbotLastFound = false;
 static float g_tpDist = 120.f;
 static float g_tpHeightOffset = 30.f;
 static bool g_snowEnabled = false;
@@ -206,31 +209,14 @@ static bool g_handsColorEnabled = false;
 static float g_handsColor[4]{0.9f,0.9f,0.95f,1.f};
 static bool g_skyColorEnabled = false;
 static float g_skyColor[4]{0.225259f,0.192963f,0.693548f,1.f};
-static bool g_skyNightMode = false;
-static float g_skyNightStrength = 0.65f;  // lerp toward dark night tint (0–1)
-// World fog (C_GradientFog entity manipulation)
-static bool g_worldFogEnabled = false;
-static float g_worldFogColor[4]{0.04f, 0.05f, 0.08f, 1.f};  // dark night default
-static float g_worldFogStrength = 1.8f;
-static uintptr_t g_fogEntityPtr = 0;  // cached fog entity
-static UINT64 g_fogEntityScanTick = 0;
+static bool g_worldColorEnabled = false;
+static float g_worldColor[4]{0.92f, 0.94f, 1.f, 1.f};  // multiply map/prop tint (RGB)
 static bool g_watermarkEnabled = true;
 static bool g_showFpsWatermark = true;
 static bool g_spectatorListEnabled = false;
 static bool g_hitNotifEnabled = true;
 static bool g_killNotifEnabled = true;
 static bool g_hitSoundEnabled = false;
-static bool g_hitmarkerEnabled = false;
-static float g_hitmarkerDuration = 0.4f;
-static int g_hitmarkerStyle = 0;  // 0=cross 1=X
-static UINT64 g_lastHitmarkerTime = 0;
-static bool g_hitmarkerCenter = true;
-static bool g_hitmarkerWorldAtHit = false;
-static bool g_hitmarkerHitParticles = false;
-static float g_hitmarkerScreenX = 0.f, g_hitmarkerScreenY = 0.f;
-static bool g_hitmarkerHasScreenPos = false;
-static bool g_pendingHitParticles = false;
-static Vec3 g_lastHitParticlePos{};
 static bool g_damageFloatersEnabled = true;
 static float g_damageFloaterDuration = 0.85f;
 static float g_damageFloaterScale = 1.f;
@@ -352,11 +338,11 @@ struct DamageFloater{ int damage; UINT64 spawnMs; float ax, ay; float duration;
 static std::deque<DamageFloater> g_damageFloaters;
 static DWORD g_lastSoundPingTick[ESP_MAX_PLAYERS + 1] = {};
 static bool g_visMap[ESP_MAX_PLAYERS + 1] = {};
-// Anti-flicker: stale cache keeps drawing entities for 80ms after they disappear; visibility hysteresis
+// Anti-flicker: stale cache / visibility hysteresis (also stabilizes glow on spotted flag)
 static ESPEntry g_esp_stale[ESP_MAX_PLAYERS + 1] = {};
 static UINT64 g_esp_stale_tick[ESP_MAX_PLAYERS + 1] = {};
 static UINT64 g_visLastTrueTick[ESP_MAX_PLAYERS + 1] = {};
-static constexpr DWORD ESP_STALE_MS = 80;
+static constexpr DWORD ESP_STALE_MS = 150;
 
 // Math
 static inline float Clampf(float v, float lo, float hi){return v<lo?lo:(v>hi?hi:v);}
@@ -476,6 +462,23 @@ static constexpr size_t kSceneObjectInfoIdOffset = 0xB0;
 
 static inline bool IsLikelyPtr(uintptr_t p){
     return (p > 0x10000 && p < 0x00007FFFFFFFFFFF);
+}
+
+static inline bool CharEqI(char a, char b){
+    unsigned char ua = (unsigned char)a, ub = (unsigned char)b;
+    if(ua >= 'A' && ua <= 'Z') ua = (unsigned char)(ua - 'A' + 'a');
+    if(ub >= 'A' && ub <= 'Z') ub = (unsigned char)(ub - 'A' + 'a');
+    return ua == ub;
+}
+static bool StrContainsI(const char* hay, const char* needle){
+    if(!hay || !needle) return false;
+    for(; *hay; ++hay){
+        const char* h = hay;
+        const char* n = needle;
+        while(*h && *n && CharEqI(*h, *n)){ ++h; ++n; }
+        if(!*n) return true;
+    }
+    return false;
 }
 
 static const char* SafeMaterialName(uintptr_t mat){
@@ -1006,6 +1009,9 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="aimbot_vis"){ g_aimbotVisCheck=ParseBool(val); return true; }
     // auto_fire removed
     if(key=="aimbot_bone"){ int v; if(ParseInt(val,v)) g_aimbotBone=v; else ok=false; return true; }
+    if(key=="wait_aim_fire"){ g_waitAimThenFire=ParseBool(val); return true; }
+    if(key=="wait_aim_deg"){ float v; if(ParseFloat(val,v)) g_waitAimFovDeg=v; else ok=false; return true; }
+    if(key=="autostop"){ g_autostopEnabled=ParseBool(val); return true; }
     if(key=="rcs_enabled"){ g_rcsEnabled=ParseBool(val); return true; }
     if(key=="rcs_x"){ float v; if(ParseFloat(val,v)){ g_rcsX=v; rcsXSet=true; } else ok=false; return true; }
     if(key=="rcs_y"){ float v; if(ParseFloat(val,v)){ g_rcsY=v; rcsYSet=true; } else ok=false; return true; }
@@ -1049,11 +1055,8 @@ static bool LoadConfigKeyVisual(const std::string& key, const std::string& val, 
     if(key=="particles_depth_fade"){ float v; if(ParseFloat(val,v)) g_particlesDepthFade=v; else ok=false; return true; }
     if(key=="sky_color_enabled"){ g_skyColorEnabled=ParseBool(val); return true; }
     if(key=="sky_color"){ if(!ParseColor4(val,g_skyColor)) ok=false; return true; }
-    if(key=="sky_night_mode"){ g_skyNightMode=ParseBool(val); return true; }
-    if(key=="sky_night_strength"){ float v; if(ParseFloat(val,v)) g_skyNightStrength=v; else ok=false; return true; }
-    if(key=="world_fog"){ g_worldFogEnabled=ParseBool(val); return true; }
-    if(key=="world_fog_col"){ if(!ParseColor4(val,g_worldFogColor)) ok=false; return true; }
-    if(key=="world_fog_strength"){ float v; if(ParseFloat(val,v)) g_worldFogStrength=v; else ok=false; return true; }
+    if(key=="world_color_enabled"){ g_worldColorEnabled=ParseBool(val); return true; }
+    if(key=="world_color"){ if(!ParseColor4(val,g_worldColor)) ok=false; return true; }
     if(key=="damage_floaters"){ g_damageFloatersEnabled=ParseBool(val); return true; }
     if(key=="damage_floater_duration"){ float v; if(ParseFloat(val,v)) g_damageFloaterDuration=v; else ok=false; return true; }
     if(key=="damage_floater_scale"){ float v; if(ParseFloat(val,v)) g_damageFloaterScale=v; else ok=false; return true; }
@@ -1082,12 +1085,6 @@ static bool LoadConfigKeyMisc(const std::string& key, const std::string& val, bo
         if(key=="keybinds_enabled"){ g_keybindsEnabled=ParseBool(val); return true; }
     if(key=="hit_notif"){ g_hitNotifEnabled=ParseBool(val); return true; }
     if(key=="kill_notif"){ g_killNotifEnabled=ParseBool(val); return true; }
-    if(key=="hitmarker"){ g_hitmarkerEnabled=ParseBool(val); return true; }
-    if(key=="hitmarker_duration"){ float v; if(ParseFloat(val,v)) g_hitmarkerDuration=v; else ok=false; return true; }
-    if(key=="hitmarker_style"){ int v; if(ParseInt(val,v)) g_hitmarkerStyle=v; else ok=false; return true; }
-    if(key=="hitmarker_center"){ g_hitmarkerCenter=ParseBool(val); return true; }
-    if(key=="hitmarker_world"){ g_hitmarkerWorldAtHit=ParseBool(val); return true; }
-    if(key=="hitmarker_particles"){ g_hitmarkerHitParticles=ParseBool(val); return true; }
     if(key=="hit_sound"){ g_hitSoundEnabled=ParseBool(val); return true; }
     if(key=="hit_sound_type"){ int v; if(ParseInt(val,v)) g_hitSoundType=v; else ok=false; return true; }
     if(key=="radar"){ g_radarEnabled=ParseBool(val); return true; }
@@ -1207,11 +1204,8 @@ static void ApplyDefaults(){
     g_particlesDepthFade = 0.0022f;
     g_skyColorEnabled = false;
     g_skyColor[0]=0.4f; g_skyColor[1]=0.5f; g_skyColor[2]=0.8f; g_skyColor[3]=1.f;
-    g_skyNightMode = false;
-    g_skyNightStrength = 0.65f;
-    g_worldFogEnabled = false;
-    g_worldFogColor[0]=0.04f; g_worldFogColor[1]=0.05f; g_worldFogColor[2]=0.08f; g_worldFogColor[3]=1.f;
-    g_worldFogStrength = 1.8f;
+    g_worldColorEnabled = false;
+    g_worldColor[0]=0.92f; g_worldColor[1]=0.94f; g_worldColor[2]=1.f; g_worldColor[3]=1.f;
     g_damageFloatersEnabled = true;
     g_damageFloaterDuration = 0.85f;
     g_damageFloaterScale = 1.f;
@@ -1224,12 +1218,8 @@ static void ApplyDefaults(){
     g_keybindsEnabled = true;
     g_hitNotifEnabled = true;
     g_killNotifEnabled = true;
-    g_hitmarkerEnabled = false;
-    g_hitmarkerDuration = 0.4f;
-    g_hitmarkerStyle = 0;
-    g_hitmarkerCenter = true;
-    g_hitmarkerWorldAtHit = false;
-    g_hitmarkerHitParticles = false;
+    g_waitAimThenFire = false;
+    g_waitAimFovDeg = 2.5f;
     g_hitSoundEnabled = false;
     g_hitSoundType = 1;
     g_radarEnabled = true;
@@ -1325,6 +1315,9 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "aimbot_vis", g_aimbotVisCheck);
 
     WriteInt(out, "aimbot_bone", g_aimbotBone);
+    WriteBool(out, "wait_aim_fire", g_waitAimThenFire);
+    WriteFloat(out, "wait_aim_deg", g_waitAimFovDeg);
+    WriteBool(out, "autostop", g_autostopEnabled);
     WriteBool(out, "rcs_enabled", g_rcsEnabled);
     WriteFloat(out, "rcs_x", g_rcsX);
     WriteFloat(out, "rcs_y", g_rcsY);
@@ -1364,11 +1357,8 @@ static bool SaveConfig(const char* name){
     WriteFloat(out, "particles_depth_fade", g_particlesDepthFade);
     WriteBool(out, "sky_color_enabled", g_skyColorEnabled);
     WriteColor(out, "sky_color", g_skyColor);
-    WriteBool(out, "sky_night_mode", g_skyNightMode);
-    WriteFloat(out, "sky_night_strength", g_skyNightStrength);
-    WriteBool(out, "world_fog", g_worldFogEnabled);
-    WriteColor(out, "world_fog_col", g_worldFogColor);
-    WriteFloat(out, "world_fog_strength", g_worldFogStrength);
+    WriteBool(out, "world_color_enabled", g_worldColorEnabled);
+    WriteColor(out, "world_color", g_worldColor);
     WriteBool(out, "damage_floaters", g_damageFloatersEnabled);
     WriteFloat(out, "damage_floater_duration", g_damageFloaterDuration);
     WriteFloat(out, "damage_floater_scale", g_damageFloaterScale);
@@ -1379,12 +1369,6 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "keybinds_enabled", g_keybindsEnabled);
     WriteBool(out, "hit_notif", g_hitNotifEnabled);
     WriteBool(out, "kill_notif", g_killNotifEnabled);
-    WriteBool(out, "hitmarker", g_hitmarkerEnabled);
-    WriteFloat(out, "hitmarker_duration", g_hitmarkerDuration);
-    WriteInt(out, "hitmarker_style", g_hitmarkerStyle);
-    WriteBool(out, "hitmarker_center", g_hitmarkerCenter);
-    WriteBool(out, "hitmarker_world", g_hitmarkerWorldAtHit);
-    WriteBool(out, "hitmarker_particles", g_hitmarkerHitParticles);
     WriteBool(out, "hit_sound", g_hitSoundEnabled);
     WriteInt(out, "hit_sound_type", g_hitSoundType);
     WriteBool(out, "radar", g_radarEnabled);
@@ -1448,13 +1432,10 @@ static bool LoadConfig(const char* name){
     g_particlesWorldFloor = Clampf(g_particlesWorldFloor, -200.f, 400.f);
     g_particlesWind = Clampf(g_particlesWind, 0.f, 60.f);
     g_particlesDepthFade = Clampf(g_particlesDepthFade, 0.0005f, 0.01f);
-    g_skyNightStrength = Clampf(g_skyNightStrength, 0.f, 1.f);
+    g_waitAimFovDeg = Clampf(g_waitAimFovDeg, 0.4f, 15.f);
     g_damageFloaterDuration = Clampf(g_damageFloaterDuration, 0.25f, 2.5f);
     g_damageFloaterScale = Clampf(g_damageFloaterScale, 0.4f, 2.5f);
     g_damageFloaterAnchor &= 1;
-    g_hitmarkerDuration = Clampf(g_hitmarkerDuration, 0.1f, 2.5f);
-    if(g_hitmarkerStyle < 0) g_hitmarkerStyle = 0;
-    if(g_hitmarkerStyle > 1) g_hitmarkerStyle = 1;
     g_soundPuddleScale = Clampf(g_soundPuddleScale, 0.3f, 3.0f);
     g_soundPuddleAlpha = Clampf(g_soundPuddleAlpha, 0.f, 2.0f);
     return ok;
@@ -1508,10 +1489,10 @@ static void BuildESPData(){
                 vis = g_visMap[i];
             }
         }
-        // Visibility hysteresis: once visible, stay visible for 80ms to reduce flicker
+        // Visibility hysteresis: once visible, stay visible (reduces glow/ESP flicker)
         if(i > 0 && i <= ESP_MAX_PLAYERS && vis) g_visLastTrueTick[i] = GetTickCount64();
         UINT64 now = GetTickCount64();
-        bool effVis = vis || (i > 0 && i <= ESP_MAX_PLAYERS && (now - g_visLastTrueTick[i]) < 80);
+        bool effVis = vis || (i > 0 && i <= ESP_MAX_PLAYERS && (now - g_visLastTrueTick[i]) < ESP_STALE_MS);
         if(g_espOnlyVis && !effVis) continue;
         uintptr_t scn=Rd<uintptr_t>(pawn+offsets::base_entity::m_pGameSceneNode);
         Vec3 origin{};if(scn)origin=Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
@@ -1796,18 +1777,6 @@ static void ProcessHitEvents(){
             LogEntry le{}; std::snprintf(le.text,sizeof(le.text),"%s",buf); le.color=IM_COL32(240,180,60,255); le.maxlife=4.f; le.lifetime=4.f; le.type=0;
             g_logs.push_back(le); if(g_logs.size()>8)g_logs.pop_front();
             PlayHitSound(g_hitSoundType);
-            if(g_hitmarkerHitParticles){
-                g_lastHitParticlePos = {e.head_ox, e.head_oy, e.head_oz};
-                g_pendingHitParticles = true;
-            }
-            if(g_hitmarkerEnabled){
-                g_lastHitmarkerTime = GetTickCount64();
-                float ax = (g_damageFloaterAnchor == 1) ? e.chest_x : e.head_x;
-                float ay = (g_damageFloaterAnchor == 1) ? e.chest_y : e.head_y;
-                g_hitmarkerScreenX = ax;
-                g_hitmarkerScreenY = ay;
-                g_hitmarkerHasScreenPos = std::isfinite(ax) && std::isfinite(ay);
-            }
             if(g_damageFloatersEnabled){
                 DamageFloater df{};
                 df.damage = dmg;
@@ -2027,22 +1996,28 @@ static void RunSkinChanger(){
 
 static void RunAutostop(){
     if(!g_autostopEnabled||!g_client)return;
-    if(!(GetAsyncKeyState(g_aimbotKey)&0x8000))return;  // Only when holding aim key
     if(g_menuOpen) return;
+    bool aimHeld = (GetAsyncKeyState(g_aimbotKey) & 0x8000) != 0;
+    bool fireHeld = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    if(!aimHeld || !fireHeld) return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
+    int shots = Rd<int>(lp + offsets::cs_pawn::m_iShotsFired);
+    if(shots > 0) return;  // only before the first shot of a click (counter-strafe tap-in)
+    uintptr_t vaAddr = ViewAnglesAddr();
+    if(!vaAddr) return;
     __try{
-        Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
-        float spd2d=sqrtf(vel.x*vel.x+vel.y*vel.y);
-        if(spd2d > 5.f){
-            // Zero velocity client-side for prediction accuracy
-            Vec3 stopped{0.f, 0.f, vel.z};
-            Wr<Vec3>(lp+offsets::base_entity::m_vecVelocity, stopped);
-            // Also suppress all movement buttons so no new velocity is added this frame
-            Wr<int>(g_client+offsets::buttons::forward, 0);
-            Wr<int>(g_client+offsets::buttons::back,    0);
-            Wr<int>(g_client+offsets::buttons::left,    0);
-            Wr<int>(g_client+offsets::buttons::right,   0);
-        }
+        Vec3 vel = Rd<Vec3>(lp + offsets::base_entity::m_vecVelocity);
+        float yawDeg = Rd<float>(vaAddr + 4);
+        float yaw = yawDeg * (3.14159265f / 180.f);
+        float cosY = cosf(yaw), sinY = sinf(yaw);
+        float forward = vel.x * cosY + vel.y * sinY;
+        float side = -vel.x * sinY + vel.y * cosY;
+        const float dz = 12.f;
+        if(fabsf(forward) < dz && fabsf(side) < dz) return;
+        Wr<int>(g_client + offsets::buttons::forward, forward < -dz ? 65537 : 0);
+        Wr<int>(g_client + offsets::buttons::back,    forward > dz ? 65537 : 0);
+        Wr<int>(g_client + offsets::buttons::left,    side > dz ? 65537 : 0);
+        Wr<int>(g_client + offsets::buttons::right,   side < -dz ? 65537 : 0);
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
 
@@ -2086,58 +2061,6 @@ static void RunBHop(){
 // RunAutoPeek removed
 
 // RunAntiAim removed
-
-// Scan entity list for C_GradientFog entity (indices 512-2048, non-player zone)
-static uintptr_t FindFogEntity(){
-    if(!g_client) return 0;
-    uintptr_t entityList = Rd<uintptr_t>(g_client + offsets::client::dwEntityList);
-    if(!entityList) return 0;
-    for(int i = 512; i < 2048; i++){
-        uintptr_t chunk = Rd<uintptr_t>(entityList + 8*((i & 0x7FFF) >> 9) + 16);
-        if(!chunk) continue;
-        uintptr_t ent = Rd<uintptr_t>(chunk + 112 * (i & 0x1FF));  // kEntityListStride=112
-        if(!ent || !IsLikelyPtr(ent)) continue;
-        __try {
-            // m_bIsEnabled at 0x641 must be 0 or 1
-            uint8_t enabled = Rd<uint8_t>(ent + 0x641);
-            if(enabled > 1) continue;
-            // m_flFogStrength at 0x638 must be finite and in [0, 20]
-            float strength = Rd<float>(ent + 0x638);
-            if(!std::isfinite(strength) || strength < 0.f || strength > 20.f) continue;
-            // m_fogColor at 0x634: at least one channel non-zero
-            uint32_t col = Rd<uint32_t>(ent + 0x634);
-            if(col == 0) continue;
-            // m_flFogStartDistance at 0x624 (from cs2-dumper): plausible float
-            float startDist = Rd<float>(ent + 0x624);
-            if(!std::isfinite(startDist)) continue;
-            return ent;
-        } __except(EXCEPTION_EXECUTE_HANDLER) {}
-    }
-    return 0;
-}
-
-static void RunWorldFog(){
-    if(!g_worldFogEnabled || !g_client) return;
-    UINT64 now = GetTickCount64();
-    // Re-scan every 3s or when pointer lost
-    if(!g_fogEntityPtr && now - g_fogEntityScanTick > 3000){
-        g_fogEntityPtr = FindFogEntity();
-        g_fogEntityScanTick = now;
-    }
-    if(!g_fogEntityPtr) return;
-    __try {
-        // Write fog color as RGBA bytes
-        Wr<uint8_t>(g_fogEntityPtr + 0x634, (uint8_t)(g_worldFogColor[0] * 255));
-        Wr<uint8_t>(g_fogEntityPtr + 0x635, (uint8_t)(g_worldFogColor[1] * 255));
-        Wr<uint8_t>(g_fogEntityPtr + 0x636, (uint8_t)(g_worldFogColor[2] * 255));
-        Wr<uint8_t>(g_fogEntityPtr + 0x637, 255);
-        // Write fog strength and enable
-        Wr<float>(g_fogEntityPtr + 0x638, g_worldFogStrength);
-        Wr<uint8_t>(g_fogEntityPtr + 0x641, 1);
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
-        g_fogEntityPtr = 0;  // ptr went bad, rescan next time
-    }
-}
 
 static void RunFOVChanger(){
     if(!g_fovEnabled||!g_client)return;
@@ -2255,10 +2178,15 @@ static void ReleaseTriggerAttack(){
 }
 
 static void RunAimbot(){
+    g_aimbotLastFound = false;
+    g_aimbotLastBestFov = 1e9f;
     if(!g_aimbotEnabled||!g_client)return;
     if(g_menuOpen) return;
     if(!(GetAsyncKeyState(g_aimbotKey)&0x8000))return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
+    bool lmbHeld = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    int shotsFired = Rd<int>(lp + offsets::cs_pawn::m_iShotsFired);
+    if(g_rcsEnabled && lmbHeld && shotsFired >= 1) return;
     uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
     uintptr_t sc0=Rd<uintptr_t>(lp+offsets::base_entity::m_pGameSceneNode);Vec3 localOrigin{};
     if(sc0)localOrigin=Rd<Vec3>(sc0+offsets::scene_node::m_vecAbsOrigin);
@@ -2335,6 +2263,8 @@ static void RunAimbot(){
         }
     }
     if(!found)return;
+    g_aimbotLastFound = true;
+    g_aimbotLastBestFov = bestDist;
     Vec2 targetAngle=CalcAngle(eyePos,bestPoint);
     float smooth=Clampf(g_aimbotSmooth,1.f,50.f);
     float dp=AngleDiff(targetAngle.x,curPitch);
@@ -2353,6 +2283,18 @@ static void RunDoubleTap(){
     if(!g_dtEnabled||!g_client) return;
     if(!(GetAsyncKeyState(g_dtKey)&0x8000)) return;
     Wr<int>(g_client+offsets::buttons::attack,65537);
+}
+
+static void RunAimFireGate(){
+    if(!g_waitAimThenFire || !g_aimbotEnabled || !g_client || g_menuOpen) return;
+    if(!(GetAsyncKeyState(g_aimbotKey) & 0x8000)) return;
+    if(!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return;
+    uintptr_t lp = Rd<uintptr_t>(g_client + offsets::client::dwLocalPlayerPawn);
+    if(!lp) return;
+    int shots = Rd<int>(lp + offsets::cs_pawn::m_iShotsFired);
+    if(g_rcsEnabled && shots >= 1) return;
+    if(g_aimbotLastFound && g_aimbotLastBestFov <= g_waitAimFovDeg) return;
+    Wr<int>(g_client + offsets::buttons::attack, 0);
 }
 
 struct Particle{
@@ -3727,7 +3669,9 @@ static void DrawMenu(){
             PidoKeybind("Aimbot key","", &g_aimbotKey);
             PidoToggle("FOV circle","", &g_fovCircleEnabled);
             if(g_fovCircleEnabled) PidoColorEdit4("FOV color","", g_fovCircleCol);
-            PidoToggle("Autostop","", &g_autostopEnabled);
+            PidoToggle("Autostop","Counter-strafe before first shot (aim+LMB)", &g_autostopEnabled);
+            PidoToggle("Wait aim then fire","Block shoot until on target", &g_waitAimThenFire);
+            if(g_waitAimThenFire) PidoSliderFloat("Aim lock (deg)","", &g_waitAimFovDeg, 0.5f, 8.f, "%.2f");
             PidoToggle("Visibility check","", &g_aimbotVisCheck);
             // Ragebot toggle removed
         }
@@ -3824,15 +3768,6 @@ static void DrawMenu(){
             PidoColorEdit4("Glow team","", g_glowTeamCol);
             PidoSliderFloat("Glow alpha","", &g_glowAlpha, 0.2f, 1.0f, "%.2f");
         }
-        PidoToggle("Hitmarker","", &g_hitmarkerEnabled);
-        if(g_hitmarkerEnabled){
-            PidoSliderFloat("Hitmarker time","", &g_hitmarkerDuration, 0.15f, 1.2f, "%.2f");
-            const char* hmStyles[]={"Cross","X"};
-            PidoCombo("Hitmarker style","", &g_hitmarkerStyle, hmStyles, 2);
-            PidoToggle("Center cross","", &g_hitmarkerCenter);
-            PidoToggle("At hit (screen)","", &g_hitmarkerWorldAtHit);
-        }
-        PidoToggle("Hit sparks (3D)","", &g_hitmarkerHitParticles);
         EndPidoGroup();
 
         ImGui::SetCursorPos({rightX, contentY + effectsH + gap});
@@ -3851,15 +3786,8 @@ static void DrawMenu(){
         BeginPidoGroup("##g_world", "World", {childW, contentH});
         PidoToggle("Sky color","", &g_skyColorEnabled);
         if(g_skyColorEnabled) PidoColorEdit4("Sky##col","", g_skyColor);
-        PidoToggle("Night mode (sky)","", &g_skyNightMode);
-        if(g_skyNightMode) PidoSliderFloat("Night blend","", &g_skyNightStrength, 0.f, 1.f, "%.2f");
-        PidoSection("World Fog");
-        PidoToggle("World fog","Modify C_GradientFog entity", &g_worldFogEnabled);
-        if(g_worldFogEnabled){
-            PidoColorEdit4("Fog color","", g_worldFogColor);
-            PidoSliderFloat("Fog strength","", &g_worldFogStrength, 0.f, 8.f, "%.2f");
-            if(PidoButton("Rescan entity", ImVec2(0,0))){ g_fogEntityPtr = 0; g_fogEntityScanTick = 0; }
-        }
+        PidoToggle("World color","Tint map/props (scene draw)", &g_worldColorEnabled);
+        if(g_worldColorEnabled) PidoColorEdit4("World tint (multiply)","", g_worldColor);
         EndPidoGroup();
 
         ImGui::SetCursorPos({rightX, contentY});
@@ -4013,31 +3941,6 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             g_particles.push_back(p);
         }
         g_pendingKillParticles=false;
-    }
-    if(g_pendingHitParticles && vm && g_hitmarkerHitParticles){
-        ImU32 sparkCol = IM_COL32(255, 210, 90, 240);
-        for(int i = 0; i < 22 && (int)g_particles.size() < MAX_PARTICLES; i++){
-            Particle p{};
-            p.type = 5;
-            p.color = sparkCol;
-            p.worldPos = g_lastHitParticlePos;
-            p.is3D = true;
-            float theta = Randf(0.f, 6.2831853f);
-            float phi = Randf(0.25f, 1.35f);
-            float spd = Randf(140.f, 320.f);
-            float vx = spd * sinf(phi) * cosf(theta);
-            float vy = spd * sinf(phi) * sinf(theta);
-            float vz = Randf(80.f, 220.f);
-            p.worldVel = {vx, vy, vz};
-            p.size = Randf(0.8f, 2.2f);
-            p.maxlife = Randf(0.12f, 0.32f);
-            p.lifetime = p.maxlife;
-            p.phase = Randf(0.f, 6.28f);
-            p.rot = Randf(0.f, 6.28f);
-            p.spin = Randf(-6.f, 6.f);
-            g_particles.push_back(p);
-        }
-        g_pendingHitParticles = false;
     }
     static float snowAcc=0.f,sakuraAcc=0.f,starAcc=0.f;
     int snowRate=(g_snowDensity==0?25:(g_snowDensity==1?60:120));
@@ -4197,36 +4100,6 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
     }
 }
 
-static void DrawHitmarkerCross(ImDrawList* dl, float cx, float cy, float alpha){
-    const float gap = 2.5f;
-    const float len = gap + 6.f;
-    // Color: gold for headshot, white→red fade for normal
-    ImU32 col, outline;
-    if(g_hitmarkerWasHeadshot){
-        col     = IM_COL32(220,170,60,(int)(240*alpha));
-        outline = IM_COL32(0,0,0,(int)(130*alpha));
-    } else {
-        // white fades toward red as alpha drops
-        int r = 255, g_ = (int)LerpF(255.f, 60.f, 1.f - alpha), b_ = (int)LerpF(255.f, 60.f, 1.f - alpha);
-        col     = IM_COL32(r, g_, b_, (int)(230*alpha));
-        outline = IM_COL32(0,0,0,(int)(120*alpha));
-    }
-    if(g_hitmarkerStyle == 0){
-        // Plus (+) with inner gap
-        dl->AddLine({cx-len,cy},{cx-gap,cy},outline,2.5f); dl->AddLine({cx-len,cy},{cx-gap,cy},col,1.5f);
-        dl->AddLine({cx+gap,cy},{cx+len,cy},outline,2.5f); dl->AddLine({cx+gap,cy},{cx+len,cy},col,1.5f);
-        dl->AddLine({cx,cy-len},{cx,cy-gap},outline,2.5f); dl->AddLine({cx,cy-len},{cx,cy-gap},col,1.5f);
-        dl->AddLine({cx,cy+gap},{cx,cy+len},outline,2.5f); dl->AddLine({cx,cy+gap},{cx,cy+len},col,1.5f);
-    }else{
-        // X with inner gap
-        float d = gap * 0.707f, e = len * 0.707f;
-        dl->AddLine({cx-e,cy-e},{cx-d,cy-d},outline,2.f); dl->AddLine({cx-e,cy-e},{cx-d,cy-d},col,1.5f);
-        dl->AddLine({cx+d,cy+d},{cx+e,cy+e},outline,2.f); dl->AddLine({cx+d,cy+d},{cx+e,cy+e},col,1.5f);
-        dl->AddLine({cx+e,cy-e},{cx+d,cy-d},outline,2.f); dl->AddLine({cx+e,cy-e},{cx+d,cy-d},col,1.5f);
-        dl->AddLine({cx-d,cy+d},{cx-e,cy+e},outline,2.f); dl->AddLine({cx-d,cy+d},{cx-e,cy+e},col,1.5f);
-    }
-}
-
 static void DrawDamageFloaters(float sw, float sh){
     if(g_damageFloaters.empty()) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
@@ -4282,28 +4155,6 @@ static void DrawDamageFloaters(float sw, float sh){
         }
         dl->AddText(fb, fs, {tx, ty}, textCol, buf);
         ++it;
-    }
-}
-
-static void DrawHitmarker(float sw, float sh){
-    if(!g_hitmarkerEnabled || !g_lastHitmarkerTime) return;
-    UINT64 elapsed = GetTickCount64() - g_lastHitmarkerTime;
-    float durMs = g_hitmarkerDuration * 1000.f;
-    if(elapsed >= (UINT64)durMs){
-        g_lastHitmarkerTime = 0;
-        g_hitmarkerHasScreenPos = false;
-        return;
-    }
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-    if(!dl) return;
-    float t = 1.f - (float)elapsed / durMs;
-    float alpha = t;
-    if(g_hitmarkerCenter)
-        DrawHitmarkerCross(dl, sw * 0.5f, sh * 0.5f, alpha);
-    if(g_hitmarkerWorldAtHit && g_hitmarkerHasScreenPos){
-        float m = 20.f;
-        if(g_hitmarkerScreenX >= -m && g_hitmarkerScreenX <= sw + m && g_hitmarkerScreenY >= -m && g_hitmarkerScreenY <= sh + m)
-            DrawHitmarkerCross(dl, g_hitmarkerScreenX, g_hitmarkerScreenY, alpha * 0.92f);
     }
 }
 
@@ -5208,11 +5059,10 @@ static void RenderFrame(IDXGISwapChain*sc){
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
         RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();/*RunSkinChanger();*/
         RunBHop();
-        RunWorldFog();
         RunFOVChanger();
         third_person::Tick(g_client, ViewAnglesAddr(),
             {g_thirdPerson, g_tpDist, g_tpHeightOffset});
-        RunAutostop();RunRCS();RunAimbot();RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();
+        RunAutostop();RunAimbot();RunRCS();RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
     }else{g_esp_count=0;g_esp_oof_count=0;}
     ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();
     ImGuiIO&io=ImGui::GetIO();
@@ -5238,7 +5088,6 @@ static void RenderFrame(IDXGISwapChain*sc){
         DrawSoundPings(io.DeltaTime);
         DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); }
     DrawLogs(io.DeltaTime, sw, sh);
-    DrawHitmarker(sw, sh);
     DrawDamageFloaters(sw, sh);
     DrawWatermark(sw);
     ImGui::Render();
@@ -5307,18 +5156,17 @@ static void* ResolveRelative(void* instr, int offset, int size){
 
 static void __fastcall HookDrawSceneObject(void* a1, void* a2, void* a3, int a4, int a5, void* a6, void* a7, void* a8){
     const bool doSceneChams = g_chamsEnabled && g_chamsScene;
-    if(doSceneChams && a3 && a4 > 0 && a4 < 20000){
+    const bool doWorldColor = g_worldColorEnabled;
+    if((doSceneChams || doWorldColor || g_handsColorEnabled || g_weaponChamsEnabled) && a3 && a4 > 0 && a4 < 20000){
         __try{
             uint8_t* base = (uint8_t*)a3;
             int localTeam = g_esp_local_team;
 
-            // Try multiple known strides/offsets for different CS2 builds
             static const size_t strides[] = { 0x68, 0x78, 0x58 };
             static const size_t colorOffsets[] = { 0x40, 0x48, 0x38 };
             static const size_t infoOffsets[] = { 0x48, 0x50, 0x40 };
             static const size_t materialOffsets[] = { 0x18, 0x20, 0x10 };
             static const int infoIdOffsets[] = { 0xB0, 0xC0, 0xA0, 0x90 };
-            // Known player model class IDs across different builds
             static const int ctIds[] = { 113, 107, 115, 120 };
             static const int tIds[] = { 104, 98, 106, 110 };
             static const int armsIds[] = { 38, 35, 40 };
@@ -5332,60 +5180,70 @@ static void __fastcall HookDrawSceneObject(void* a1, void* a2, void* a3, int a4,
                         uintptr_t objBase = (uintptr_t)(base + i * stride);
                         auto* c = reinterpret_cast<MaterialColor*>(objBase + colOff);
                         if(!IsLikelyPtr((uintptr_t)c)) continue;
-                        // Sanity check: color values should be in valid range (non-zero alpha)
                         if(c->a == 0) continue;
 
+                        uintptr_t info = Rd<uintptr_t>(objBase + infoOff);
+                        int id = 0;
+                        for(int idOff : infoIdOffsets){
+                            int candidate = info ? Rd<int>(info + idOff) : 0;
+                            if(candidate > 0 && candidate < 300){ id = candidate; break; }
+                        }
+
+                        bool isCT = false, isT = false, isArms = false;
+                        for(int cid : ctIds) if(id == cid) isCT = true;
+                        for(int tid : tIds) if(id == tid) isT = true;
+                        for(int aid : armsIds) if(id == aid) isArms = true;
+
+                        uintptr_t mat = Rd<uintptr_t>(objBase + materialOffsets[strideTry]);
+                        const char* matName = SafeMaterialName(mat);
+                        bool isWeapon = matName && (strstr(matName,"weapon") || strstr(matName,"knife") || strstr(matName,"rifle") || strstr(matName,"pistol"));
+
                         bool applied = false;
-                        if(doSceneChams){
-                            uintptr_t info = Rd<uintptr_t>(objBase + infoOff);
-                            // Try multiple ID offsets
-                            int id = 0;
-                            for(int idOff : infoIdOffsets){
-                                int candidate = info ? Rd<int>(info + idOff) : 0;
-                                if(candidate > 0 && candidate < 300){ id = candidate; break; }
-                            }
-
-                            bool isCT = false, isT = false, isArms = false;
-                            for(int cid : ctIds) if(id == cid) isCT = true;
-                            for(int tid : tIds) if(id == tid) isT = true;
-                            for(int aid : armsIds) if(id == aid) isArms = true;
-
-                            bool isWeapon = false;
-                            if(g_weaponChamsEnabled){
-                                uintptr_t mat = Rd<uintptr_t>(objBase + materialOffsets[strideTry]);
-                                const char* name = SafeMaterialName(mat);
-                                if(name && (strstr(name,"weapon") || strstr(name,"knife") || strstr(name,"rifle") || strstr(name,"pistol")))
-                                    isWeapon = true;
-                            }
-
-                            if(isArms && g_handsColorEnabled){
-                                MaterialColor out = MakeMatColor(g_handsColor);
-                                out.a = c->a;
-                                *c = out;
-                                applied = true;
-                            }else if(isWeapon && g_weaponChamsEnabled){
-                                MaterialColor out = MakeMatColor(g_weaponChamsCol);
-                                out.a = c->a;
-                                *c = out;
-                                applied = true;
-                            }else if(isCT || isT){
-                                int team = isCT ? 3 : 2;
-                                bool isTeam = (localTeam != 0 && team == localTeam);
-                                if(!g_chamsEnemyOnly || !isTeam){
-                                    float tmp[4];
-                                    if(g_chamsIgnoreZ && !isTeam){
-                                        tmp[0]=g_chamsIgnoreZCol[0]; tmp[1]=g_chamsIgnoreZCol[1];
-                                        tmp[2]=g_chamsIgnoreZCol[2]; tmp[3]=g_chamsIgnoreZCol[3];
-                                    }else{
-                                        float* baseCol = isTeam ? g_chamsTeamCol : g_chamsEnemyCol;
-                                        tmp[0]=baseCol[0]; tmp[1]=baseCol[1]; tmp[2]=baseCol[2]; tmp[3]=baseCol[3];
-                                    }
-                                    ApplyChamsMaterial(tmp);
-                                    MaterialColor out = MakeMatColor(tmp);
-                                    out.a = c->a;
-                                    *c = out;
-                                    applied = true;
+                        if(isArms && g_handsColorEnabled){
+                            MaterialColor out = MakeMatColor(g_handsColor);
+                            out.a = c->a;
+                            *c = out;
+                            applied = true;
+                        }else if(isWeapon && g_weaponChamsEnabled){
+                            MaterialColor out = MakeMatColor(g_weaponChamsCol);
+                            out.a = c->a;
+                            *c = out;
+                            applied = true;
+                        }else if(doSceneChams && (isCT || isT)){
+                            int team = isCT ? 3 : 2;
+                            bool isTeam = (localTeam != 0 && team == localTeam);
+                            if(!g_chamsEnemyOnly || !isTeam){
+                                float tmp[4];
+                                if(g_chamsIgnoreZ && !isTeam){
+                                    tmp[0]=g_chamsIgnoreZCol[0]; tmp[1]=g_chamsIgnoreZCol[1];
+                                    tmp[2]=g_chamsIgnoreZCol[2]; tmp[3]=g_chamsIgnoreZCol[3];
+                                }else{
+                                    float* baseCol = isTeam ? g_chamsTeamCol : g_chamsEnemyCol;
+                                    tmp[0]=baseCol[0]; tmp[1]=baseCol[1]; tmp[2]=baseCol[2]; tmp[3]=baseCol[3];
                                 }
+                                ApplyChamsMaterial(tmp);
+                                MaterialColor out = MakeMatColor(tmp);
+                                out.a = c->a;
+                                *c = out;
+                                applied = true;
+                            }
+                        }
+
+                        if(!applied && doWorldColor && matName){
+                            bool ex = StrContainsI(matName,"player") || StrContainsI(matName,"character")
+                                || StrContainsI(matName,"viewmodel") || StrContainsI(matName,"vm_") || StrContainsI(matName,"arms");
+                            bool inc = StrContainsI(matName,"lightmapped") || StrContainsI(matName,"worldvertex")
+                                || StrContainsI(matName,"decal") || StrContainsI(matName,"concrete") || StrContainsI(matName,"metal")
+                                || StrContainsI(matName,"brick") || StrContainsI(matName,"plaster") || StrContainsI(matName,"models/props")
+                                || StrContainsI(matName,"prop_") || StrContainsI(matName,"tools/") || StrContainsI(matName,"sky")
+                                || StrContainsI(matName,"blend");
+                            if(inc && !ex){
+                                MaterialColor out{};
+                                out.r = (uint8_t)Clampf((float)c->r * g_worldColor[0], 0.f, 255.f);
+                                out.g = (uint8_t)Clampf((float)c->g * g_worldColor[1], 0.f, 255.f);
+                                out.b = (uint8_t)Clampf((float)c->b * g_worldColor[2], 0.f, 255.f);
+                                out.a = c->a;
+                                *c = out;
                             }
                         }
                         break;
@@ -5398,25 +5256,15 @@ static void __fastcall HookDrawSceneObject(void* a1, void* a2, void* a3, int a4,
 }
 
 static void __fastcall HookDrawSkyboxArray(void* a1, void* a2, void* draw_primitive, int count, void* a5, void* a6, void* a7){
-    // Sky tint only; full-scene night (fog/ambient/post) would need extra hooks + IDA offsets — experimental follow-up.
-    const bool wantSkyTint = g_skyColorEnabled || g_skyNightMode;
-    if(wantSkyTint && draw_primitive && count > 0 && count < 100){
+    if(g_skyColorEnabled && draw_primitive && count > 0 && count < 100){
         __try{
             size_t offset = (size_t)(count * 0x68) - 0x50;
             void** skybox_obj_ptr = (void**)((char*)draw_primitive + offset);
             if(skybox_obj_ptr && *skybox_obj_ptr){
                 float* color_ptr = (float*)((char*)(*skybox_obj_ptr) + 0x100);
-                float r = g_skyColor[0], g = g_skyColor[1], b = g_skyColor[2];
-                if(g_skyNightMode){
-                    float nt = Clampf(g_skyNightStrength, 0.f, 1.f);
-                    const float nr = 0.04f, ng = 0.05f, nb = 0.14f;
-                    r = r * (1.f - nt) + nr * nt;
-                    g = g * (1.f - nt) + ng * nt;
-                    b = b * (1.f - nt) + nb * nt;
-                }
-                color_ptr[0] = r;
-                color_ptr[1] = g;
-                color_ptr[2] = b;
+                color_ptr[0] = g_skyColor[0];
+                color_ptr[1] = g_skyColor[1];
+                color_ptr[2] = g_skyColor[2];
             }
         }__except(EXCEPTION_EXECUTE_HANDLER){}
     }
@@ -5440,7 +5288,7 @@ static void* __fastcall HookFirstPersonLegs(void* a1, void* a2, void* a3, void* 
 }
 
 static void EnsureSceneHooks(){
-    bool needSky = g_skyColorEnabled || g_skyNightMode;
+    bool needSky = g_skyColorEnabled;
     if(g_drawSceneHooked && (!needSky || g_drawSkyHooked)){
         g_sceneHooksReady = true;
         return;
