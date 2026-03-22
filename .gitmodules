@@ -4,3 +4,6 @@
 [submodule "litware-dll/external/minhook"]
 	path = litware-dll/external/minhook
 	url = https://github.com/TsudaKageyu/minhook.git
+[submodule "vendor/omath"]
+	path = vendor/omath
+	url = https://github.com/orange-cpp/omath.git
