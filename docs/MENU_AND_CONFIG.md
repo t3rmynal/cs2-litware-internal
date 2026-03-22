@@ -1,16 +1,17 @@
 # Меню и конфиг (LitWare)
 
-## Структура Electron
+## Меню (ImGui)
 
-- `src/App.tsx` — оверлей (фиксированный слой) + окно меню с `menuOffset` (перетаскивание не двигает HUD).
-- `src/components/MenuWindow.tsx` — каркас: TitleBar → **TopNav** (главные вкладки) → **VisualSubNav** (только Visuals) → контент → **MenuFooter**.
-- `src/components/layout/` — `TopNav`, `VisualSubNav`, `MenuFooter`.
-- `src/lib/dllKeys.ts` — маппинг полей store → строковые ключи для `ApplyConfigKeyFromElectron` в DLL.
+- Файл: `litware-dll/src/hooks/render_hook.cpp` — отрисовка оверлея в `Present`, кастомные виджеты (`PidoTab`, `PidoToggle`, `PidoSliderFloat`, …), группы `BeginPidoGroup` (Aimbot, ESP, Visuals, Config и т.д.).
+- Вкладки и секции UI напрямую читают/пишут глобальные флаги и значения, которые те же функции сохраняют в конфиг.
 
-## Расширенный конфиг Visuals
+## Конфиги
 
-Поля в `types/config.ts` / `store` отражают уже существующие ключи в `render_hook.cpp` (`LoadConfigKeyEsp`, `LoadConfigKeyChams`). Новые опции UI (толщина бокса, дистанция, chams, градиенты HP/ammo и т.д.) синхронизируются с DLL через `pushSectionToDll`.
+- Каталог: `%APPDATA%\litware\`, файлы **`*.cfg`** (текст `ключ=значение`).
+- Сохранение/загрузка: `SaveConfig` / `LoadConfig` в `render_hook.cpp`; внизу меню — блок **Config** (имя, список, Save/Load). 
+- Разбор по категориям: `LoadConfigKeyEsp`, `LoadConfigKeyChams`, `LoadConfigKeyAimbot`, `LoadConfigKeyMovement`, `LoadConfigKeyVisual`, `LoadConfigKeySkins`, `LoadConfigKeyMisc`.
 
-## DLL / рефакторинг `render_hook.cpp`
+## Рефакторинг
 
-Логика загрузки ключей уже разнесена по функциям `LoadConfigKeyEsp`, `LoadConfigKeyChams`, `LoadConfigKeyAimbot`, … Вынесение в отдельные `.cpp` файлы возможно при добавлении соответствующих единиц компиляции в `litware-dll.vcxproj`.
+Логику загрузки ключей можно вынести в отдельные `.cpp`, добавив единицы компиляции в `litware-dll/litware-dll.vcxproj`.
+
