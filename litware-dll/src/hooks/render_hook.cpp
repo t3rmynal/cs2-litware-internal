@@ -139,7 +139,7 @@ static bool g_noLegs = false;
 static DWORD g_lastNoSmokeTick = 0;
 static bool g_glowEnabled = true;
 static float g_glowEnemyCol[4]{0.f,0.225806f,1.f,1.f};
-static float g_glowTeamCol[4]{0.74871f,0.18f,1.f,1.f};
+static float g_glowTeamCol[4]{0.f,0.f,0.f,1.f};  // RGB default off; team glow uses RGB in menu + global g_glowAlpha
 static float g_glowAlpha = 1.0f;
 static bool g_chamsEnabled = false;
 static bool g_chamsEnemyOnly = true;
@@ -1140,7 +1140,7 @@ static void ApplyDefaults(){
     g_noLegs = false;
     g_glowEnabled = false;
     g_glowEnemyCol[0]=1.f; g_glowEnemyCol[1]=0.18f; g_glowEnemyCol[2]=0.18f; g_glowEnemyCol[3]=1.f;
-    g_glowTeamCol[0]=0.18f; g_glowTeamCol[1]=0.5f; g_glowTeamCol[2]=1.f; g_glowTeamCol[3]=1.f;
+    g_glowTeamCol[0]=0.f; g_glowTeamCol[1]=0.f; g_glowTeamCol[2]=0.f; g_glowTeamCol[3]=1.f;
     g_glowAlpha = 1.0f;
     g_chamsEnabled = false;
     g_chamsEnemyOnly = true;
@@ -1891,6 +1891,10 @@ static void RunGlow(){
             float tmp[4]{col[0], col[1], col[2], col[3]};
             if(applyChams){
                 ApplyChamsMaterial(tmp);
+            }else if(isTeam){
+                // Teammates: menu is RGB-only (NoAlpha on picker); strength = global glow alpha if RGB non-black
+                float sumRgb = tmp[0] + tmp[1] + tmp[2];
+                tmp[3] = (sumRgb < 1e-4f) ? 0.f : Clampf(g_glowAlpha, 0.f, 1.f);
             }else{
                 tmp[3] = Clampf(tmp[3] * g_glowAlpha, 0.f, 1.f);
             }
@@ -3748,7 +3752,7 @@ static void DrawMenu(){
         PidoToggle("Glow","", &g_glowEnabled);
         if(g_glowEnabled){
             PidoColorEdit4("Glow enemy","", g_glowEnemyCol);
-            PidoColorEdit4("Glow team","", g_glowTeamCol);
+            PidoColorEdit4("Glow team","", g_glowTeamCol, ImGuiColorEditFlags_NoAlpha);
             PidoSliderFloat("Glow alpha","", &g_glowAlpha, 0.2f, 1.0f, "%.2f");
         }
         EndPidoGroup();

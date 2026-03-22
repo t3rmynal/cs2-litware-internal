@@ -49,7 +49,7 @@ namespace globals {
     bool g_noLegs = false;
     bool g_glowEnabled = false;
     float g_glowEnemyCol[4]{1.f,0.18f,0.18f,1.f};
-    float g_glowTeamCol[4]{0.18f,0.5f,1.f,1.f};
+    float g_glowTeamCol[4]{0.f,0.f,0.f,1.f};
     float g_glowAlpha = 1.0f;
     bool g_chamsEnabled = false;
     bool g_chamsEnemyOnly = true;
