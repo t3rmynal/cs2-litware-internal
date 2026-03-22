@@ -3566,8 +3566,8 @@ static void DrawMenu(){
             WithAlpha(g_pido.textActive, animEased), title);
 
         // Left: version + date
-        const char* verBuf  = "v0.2.0";
-        const char* dateBuf = "release: 21.03.2026";
+        const char* verBuf  = "v0.1.2";
+        const char* dateBuf = "release: 22.03.2026";
         ImVec2 szVer  = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, verBuf);
         ImVec2 szDate = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, dateBuf);
         float lx = pos.x + 12.f*s;
