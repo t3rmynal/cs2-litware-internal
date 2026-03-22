@@ -21,8 +21,6 @@
 3. Build → Release | x64
 4. DLL: `litware-dll/bin/Release/litware-dll.dll`
 
-Для Electron-меню: `cd electron-menu` → `npm run dist` → `litware-menu.exe` рядом с DLL (или exe встроен в DLL при сборке).
-
 ---
 
 ## Управление
@@ -72,8 +70,6 @@ Internal cheat for Counter-Strike 2. Injects into `cs2.exe`, hooks DirectX 11 Pr
 2. Open `litware-dll/litware-dll.vcxproj` in Visual Studio
 3. Build → Release | x64
 4. Output: `litware-dll/bin/Release/litware-dll.dll`
-
-For Electron menu: `cd electron-menu` → `npm run dist` → place `litware-menu.exe` next to DLL (or exe is embedded in DLL on build).
 
 ---
 
