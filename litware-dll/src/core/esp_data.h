@@ -15,16 +15,16 @@ struct ESPEntry {
     uintptr_t pawn;
     uintptr_t controller;
     float head_x, head_y;
-    float chest_x, chest_y;  // screen midpoint head–feet (damage floaters / hitmarker anchor)
+    float chest_x, chest_y;  // центр между головой и ногами
     float head_fx, head_fy;
-    float head_ox, head_oy, head_oz;  // world-space head for aimbot
+    float head_ox, head_oy, head_oz;  // голова в мире
     float origin_x, origin_y, origin_z;
     float feet_x, feet_y;
     float box_l, box_t, box_r, box_b;
     int   health;
     int   team;
-    float distance;   // (enemy_origin - local_origin).length() / 100 (~meters)
-    float yaw;        // horizontal rotation (0-360) for future use
+    float distance;  // метры
+    float yaw;
     char  name[128];
 };
 

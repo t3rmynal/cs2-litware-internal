@@ -8,7 +8,7 @@ void entry() {
     BootstrapLog("[litware] entry() start");
     DebugLog("[litware] entry() start");
 
-    // Wait for game to be ready (main menu) - injectors often run before Steam overlay loads
+    // ждём оверлей
     for (int i = 0; i < 50; ++i) {
         if (GetModuleHandleA("gameoverlayrenderer64.dll") != nullptr)
             break;

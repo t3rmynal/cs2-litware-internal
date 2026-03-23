@@ -1,30 +1,25 @@
 #pragma once
 #include <cstdint>
 
-// Synced from offsets/output (cs2-dumper) — 2026-03-19 UTC, game build 14141
-// Sources: offsets.hpp, buttons.hpp, client_dll.hpp
-
+// обновлено 2026 03 19
 namespace offsets {
 
-    // -- Module offsets (client.dll) --
     namespace client {
-        constexpr uintptr_t dwCSGOInput              = 0x2319FC0;
-        constexpr uintptr_t dwEntityList             = 0x24AF268;
-        constexpr uintptr_t dwGlobalVars             = 0x205E5C0;
-        constexpr uintptr_t dwLocalPlayerController  = 0x22F4188;
-        constexpr uintptr_t dwLocalPlayerPawn        = 0x2069B50;
-        constexpr uintptr_t dwViewAngles             = 0x231A648;
-        constexpr uintptr_t dwViewMatrix               = 0x230FF20;
-        constexpr uintptr_t dwGlowManager            = 0x230ACE8;
+        constexpr uintptr_t dwCSGOInput             = 0x2319FC0;
+        constexpr uintptr_t dwEntityList            = 0x24AF268;
+        constexpr uintptr_t dwGlobalVars            = 0x205E5C0;
+        constexpr uintptr_t dwLocalPlayerController = 0x22F4188;
+        constexpr uintptr_t dwLocalPlayerPawn       = 0x2069B50;
+        constexpr uintptr_t dwViewAngles            = 0x231A648;
+        constexpr uintptr_t dwViewMatrix            = 0x230FF20;
+        constexpr uintptr_t dwGlowManager           = 0x230ACE8;
     }
 
-    // -- Module offsets (engine2.dll) --
     namespace engine2 {
         constexpr uintptr_t dwWindowWidth  = 0x90C8F0;
         constexpr uintptr_t dwWindowHeight = 0x90C8F4;
     }
 
-    // -- Button commands (client.dll) --
     namespace buttons {
         constexpr uintptr_t attack  = 0x20628F0;
         constexpr uintptr_t attack2 = 0x2062980;
@@ -36,9 +31,8 @@ namespace offsets {
         constexpr uintptr_t duck    = 0x2062E90;
     }
 
-    // -- C_BaseEntity --
     namespace base_entity {
-        constexpr uintptr_t m_CBodyComponent   = 0x38;
+        constexpr uintptr_t m_CBodyComponent  = 0x38;
         constexpr uintptr_t m_iHealth         = 0x354;
         constexpr uintptr_t m_lifeState       = 0x35C;
         constexpr uintptr_t m_iTeamNum        = 0x3F3;
@@ -47,29 +41,24 @@ namespace offsets {
         constexpr uintptr_t m_pGameSceneNode  = 0x338;
     }
 
-    // -- CGameSceneNode --
     namespace scene_node {
         constexpr uintptr_t m_vecAbsOrigin = 0xD0;
         constexpr uintptr_t m_angRotation  = 0xC0;
     }
 
-    // -- CBodyComponent --
     namespace body_component {
         constexpr uintptr_t m_pSceneNode       = 0x8;
-        constexpr uintptr_t m_skeletonInstance = 0x80; // CBodyComponentSkeletonInstance::m_skeletonInstance
+        constexpr uintptr_t m_skeletonInstance = 0x80;
     }
 
-    // -- CSkeletonInstance --
     namespace skeleton_instance {
         constexpr uintptr_t m_modelState = 0x160;
     }
 
-    // -- CModelState: m_pBones is not in cs2-dumper (non-schema). Update via IDA if skeleton ESP breaks.
     namespace model_state {
-        constexpr uintptr_t m_pBones = 0x80;
+        constexpr uintptr_t m_pBones = 0x80;  // если сломаются кости, это место надо проверить
     }
 
-    // -- C_BasePlayerPawn --
     namespace base_pawn {
         constexpr uintptr_t m_pCameraServices   = 0x1410;
         constexpr uintptr_t m_pObserverServices = 0x13F0;
@@ -78,7 +67,6 @@ namespace offsets {
         constexpr uintptr_t m_vecViewOffset     = 0xD58;
     }
 
-    // -- CPlayer_ObserverServices --
     namespace observer {
         constexpr uintptr_t m_iObserverMode           = 0x48;
         constexpr uintptr_t m_hObserverTarget         = 0x4C;
@@ -86,32 +74,28 @@ namespace offsets {
         constexpr uintptr_t m_bForcedObserverMode     = 0x54;
     }
 
-    // -- C_CSPlayerPawnBase --
     namespace cs_pawn_base {
-        constexpr uintptr_t m_flFlashDuration = 0x15F8;
-        constexpr uintptr_t m_flFlashMaxAlpha = 0x15F4;
+        constexpr uintptr_t m_flFlashDuration         = 0x15F8;
+        constexpr uintptr_t m_flFlashMaxAlpha         = 0x15F4;
         constexpr uintptr_t m_flLastSmokeOverlayAlpha = 0x1618;
     }
 
-    // -- C_CSPlayerPawn --
     namespace cs_pawn {
-        constexpr uintptr_t m_aimPunchAngle = 0x16CC;
-        constexpr uintptr_t m_bIsPlantingViaUse = 0x1F51; // dumper: C_C4; pawn field unverified — ESP tag only
-        constexpr uintptr_t m_bIsScoped     = 0x26F8;
-        constexpr uintptr_t m_iShotsFired   = 0x270C;
-        constexpr uintptr_t m_iIDEntIndex   = 0x3EAC;
-        constexpr uintptr_t m_pGlowServices = 0x1678;
-        constexpr uintptr_t m_thirdPersonHeading = 0x24D0; // QAngle on pawn; not on CPlayer_CameraServices
+        constexpr uintptr_t m_aimPunchAngle       = 0x16CC;
+        constexpr uintptr_t m_bIsPlantingViaUse   = 0x1F51;  // поле пока не подтверждено
+        constexpr uintptr_t m_bIsScoped           = 0x26F8;
+        constexpr uintptr_t m_iShotsFired         = 0x270C;
+        constexpr uintptr_t m_iIDEntIndex         = 0x3EAC;
+        constexpr uintptr_t m_pGlowServices       = 0x1678;
+        constexpr uintptr_t m_thirdPersonHeading  = 0x24D0;
     }
 
-    // -- EntitySpottedState_t (inside C_CSPlayerPawn) --
     namespace spotted {
         constexpr uintptr_t m_entitySpottedState = 0x26E0;
         constexpr uintptr_t m_bSpotted           = 0x8;
         constexpr uintptr_t m_bSpottedByMask     = 0xC;
     }
 
-    // -- CCSPlayerController --
     namespace controller {
         constexpr uintptr_t m_sSanitizedPlayerName = 0x860;
         constexpr uintptr_t m_hPlayerPawn          = 0x90C;
@@ -122,83 +106,75 @@ namespace offsets {
         constexpr uintptr_t m_bPawnHasDefuser      = 0x920;
     }
 
-    // -- CCSPlayerController_InGameMoneyServices --
     namespace money_services {
         constexpr uintptr_t m_iAccount = 0x40;
     }
 
-    // -- C_BaseModelEntity --
     namespace model_entity {
-        constexpr uintptr_t m_Glow = 0xCC0;
+        constexpr uintptr_t m_Glow                = 0xCC0;
         constexpr uintptr_t m_pClientAlphaProperty = 0xE38;
     }
-    // -- CClientAlphaProperty --
+
     namespace client_alpha_prop {
         constexpr uintptr_t m_nAlpha = 0x17;
     }
 
-    // -- CGlowProperty --
     namespace glow_prop {
         constexpr uintptr_t m_glowColorOverride = 0x40;
         constexpr uintptr_t m_bGlowing          = 0x51;
     }
 
-    // -- CCSPlayerBase_CameraServices (concrete type behind m_pCameraServices for CS pawns) --
     namespace camera {
         constexpr uintptr_t m_iFOV = 0x290;
     }
 
-    // -- CCSGOInput: internal fields not in client_dll schema; verify after major updates --
     namespace csgo_input {
-        constexpr uintptr_t m_in_thirdperson = 0x441;
+        constexpr uintptr_t m_in_thirdperson      = 0x441;
         constexpr uintptr_t m_third_person_angles = 0x258;
     }
 
-    // -- CPlayer_WeaponServices --
     namespace weapon_services {
         constexpr uintptr_t m_hActiveWeapon = 0x60;
-        constexpr uintptr_t m_hMyWeapons   = 0x48;
+        constexpr uintptr_t m_hMyWeapons    = 0x48;
     }
 
-    // -- C_BasePlayerWeapon --
     namespace base_weapon {
-        constexpr uintptr_t m_iClip1      = 0x18D0;
+        constexpr uintptr_t m_iClip1       = 0x18D0;
         constexpr uintptr_t m_pReserveAmmo = 0x18D8;
     }
 
-    // -- C_EconEntity / C_AttributeContainer / C_EconItemView --
     namespace econ_entity {
-        constexpr uintptr_t m_AttributeManager = 0x1378;
-        constexpr uintptr_t m_OriginalOwnerXuidLow = 0x1848;
-        constexpr uintptr_t m_nFallbackPaintKit = 0x1850;
-        constexpr uintptr_t m_nFallbackSeed = 0x1854;
-        constexpr uintptr_t m_flFallbackWear = 0x1858;
-        constexpr uintptr_t m_nFallbackStatTrak = 0x185C;
+        constexpr uintptr_t m_AttributeManager      = 0x1378;
+        constexpr uintptr_t m_OriginalOwnerXuidLow  = 0x1848;
+        constexpr uintptr_t m_nFallbackPaintKit     = 0x1850;
+        constexpr uintptr_t m_nFallbackSeed         = 0x1854;
+        constexpr uintptr_t m_flFallbackWear        = 0x1858;
+        constexpr uintptr_t m_nFallbackStatTrak     = 0x185C;
     }
+
     namespace attribute_container {
         constexpr uintptr_t m_Item = 0x50;
     }
+
     namespace econ_item_view {
         constexpr uintptr_t m_iItemDefinitionIndex = 0x1BA;
-        constexpr uintptr_t m_iItemIDHigh = 0x1D0;
-        constexpr uintptr_t m_iItemIDLow = 0x1D4;
-        constexpr uintptr_t m_iAccountID = 0x1D8;
-        constexpr uintptr_t m_iEntityQuality = 0x1BC;
-        constexpr uintptr_t m_bInitialized = 0x1E8;
-        constexpr uintptr_t m_AttributeList = 0x208;
+        constexpr uintptr_t m_iItemIDHigh          = 0x1D0;
+        constexpr uintptr_t m_iItemIDLow           = 0x1D4;
+        constexpr uintptr_t m_iAccountID           = 0x1D8;
+        constexpr uintptr_t m_iEntityQuality       = 0x1BC;
+        constexpr uintptr_t m_bInitialized         = 0x1E8;
+        constexpr uintptr_t m_AttributeList        = 0x208;
     }
 
-    // -- C_PlantedC4 --
     namespace planted_c4 {
-        constexpr uintptr_t m_bBombTicking   = 0x1170;
-        constexpr uintptr_t m_nBombSite      = 0x1174;
-        constexpr uintptr_t m_flC4Blow       = 0x11A0;
-        constexpr uintptr_t m_bBeingDefused  = 0x11AC;
+        constexpr uintptr_t m_bBombTicking     = 0x1170;
+        constexpr uintptr_t m_nBombSite        = 0x1174;
+        constexpr uintptr_t m_flC4Blow         = 0x11A0;
+        constexpr uintptr_t m_bBeingDefused    = 0x11AC;
         constexpr uintptr_t m_flDefuseCountDown = 0x11C0;
-        constexpr uintptr_t m_hBombDefuser   = 0x11C8;
+        constexpr uintptr_t m_hBombDefuser     = 0x11C8;
     }
 
-    // -- C_SmokeGrenadeProjectile --
     namespace smoke_projectile {
         constexpr uintptr_t m_bSmokeEffectSpawned = 0x1499;
     }

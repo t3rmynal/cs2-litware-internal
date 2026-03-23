@@ -1,4 +1,3 @@
-// Font definitions for Fonts.h
 #include "Fonts.h"
 #include <imgui.h>
 

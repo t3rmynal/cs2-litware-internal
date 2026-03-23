@@ -2,12 +2,10 @@
 
 namespace bypass {
 
-// Initialize anti-cheat bypass (BSecureAllowed hook).
-// Call early in entry(), before render hook if possible.
+// лучше вызывать в entry пораньше
 bool Initialize();
 
-// Optional: force g_bClientIsntAllowedToPlayOnSecureServers = 0 (allow secure servers).
-// Uses pattern scan in client.dll - call after game loaded.
+// вызывать после загрузки игры
 void PatchSecureServerFlag();
 
-} // namespace bypass
+}

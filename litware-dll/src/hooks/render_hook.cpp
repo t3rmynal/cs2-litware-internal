@@ -102,20 +102,20 @@ static bool g_espShowTeam = false;
 static bool g_espName = true;
 static float g_espNameSize = 14.8f;
 static bool g_espHealth = true;
-static bool g_espHealthText = true;   // HP number (Weave style)
+static bool g_espHealthText = true;
 static int g_espHealthPos = 0;
 static int g_espHealthStyle = 0;
-static float g_espHealthGradientCol1[4]{0.56f,0.92f,0.2f,1.f};  // green (full)
-static float g_espHealthGradientCol2[4]{1.f,0.27f,0.27f,1.f};   // red (empty)
+static float g_espHealthGradientCol1[4]{0.56f,0.92f,0.2f,1.f};
+static float g_espHealthGradientCol2[4]{1.f,0.27f,0.27f,1.f};
 static bool g_espDist = true;
 static float g_espMaxDist = 100.f;
 static bool g_espSkeleton = false;
 static bool g_espLines = true;
-static int g_espLineAnchor = 1;  // 0=Top 1=Middle 2=Bottom
-static bool g_espOof = true;       // Offscreen arrows (from Pidoraise/Weave)
+static int g_espLineAnchor = 1;  // 0 верх 1 центр 2 низ
+static bool g_espOof = true;
 static float g_espOofSize = 33.f;
 static float g_skeletonThick = 1.1f;
-struct OofEntry { float x, y; float angle; ImU32 col; };  // angle: arrow points toward player
+struct OofEntry { float x, y; float angle; ImU32 col; };
 static OofEntry g_esp_oof[32];
 static int g_esp_oof_count = 0;
 static bool g_espHeadDot = false;
@@ -125,13 +125,13 @@ static bool g_espWeapon = true;
 static bool g_espWeaponIcon = true;
 static bool g_espAmmo = true;
 static int g_espAmmoStyle = 0;
-static float g_espAmmoCol1[4]{0.145098f,0.337255f,0.768627f,1.f};  // dark blue
-static float g_espAmmoCol2[4]{0.329412f,0.803922f,1.f,1.f};   // cyan
+static float g_espAmmoCol1[4]{0.145098f,0.337255f,0.768627f,1.f};
+static float g_espAmmoCol2[4]{0.329412f,0.803922f,1.f,1.f};
 static bool g_espMoney = true;
-static int g_espMoneyPos = 0;  // 0=below box 1=right side
+static int g_espMoneyPos = 0;  // 0 снизу 1 справа
 static float g_espHeadForward = 6.f;
 static float g_espScale = 1.0f;
-static int g_espPreviewPos = 0;  // 0=Right 1=Left 2=Top 3=Bottom
+static int g_espPreviewPos = 0;  // 0 справа 1 слева 2 сверху 3 снизу
 static bool g_noFlash = false;
 static bool g_noSmoke = false;
 static bool g_noCrosshair = false;
@@ -139,27 +139,27 @@ static bool g_noLegs = false;
 static DWORD g_lastNoSmokeTick = 0;
 static bool g_glowEnabled = true;
 static float g_glowEnemyCol[4]{0.f,0.225806f,1.f,1.f};
-static float g_glowTeamCol[4]{0.f,0.f,0.f,1.f};  // RGB default off; team glow uses RGB in menu + global g_glowAlpha
+static float g_glowTeamCol[4]{0.f,0.f,0.f,1.f};
 static float g_glowAlpha = 1.0f;
 static bool g_chamsEnabled = false;
 static bool g_chamsEnemyOnly = true;
-static bool g_chamsIgnoreZ = false;  // invisible/occluded chams (wall color)
-static int g_chamsMaterial = 0;      // 0=white 1=illuminate 2=latex 3=glow 4=glow2 5=metallic
+static bool g_chamsIgnoreZ = false;
+static int g_chamsMaterial = 0;      // 0 обычный 1 яркий 2 мягкий 3 свечение 4 пульс 5 металл
 static float g_chamsEnemyCol[4]{1.f,0.2f,0.2f,1.f};
 static float g_chamsTeamCol[4]{0.2f,0.5f,1.f,1.f};
 static float g_chamsIgnoreZCol[4]{0.4f,0.9f,0.5f,0.8f};
-static bool g_chamsScene = true;     // scene-object chams (model tint) via draw hook
+static bool g_chamsScene = true;
 static bool g_weaponChamsEnabled = false;
 static float g_weaponChamsCol[4]{1.f,0.88f,0.35f,1.f};
 static bool g_aimbotEnabled = false;
-static int g_aimbotKey = VK_LBUTTON;  // LMB
+static int g_aimbotKey = VK_LBUTTON;
 static float g_aimbotFov = 9.f;
 static float g_aimbotSmooth = 15.1f;
 static bool g_fovCircleEnabled = false;
-static float g_fovCircleCol[4]{0.4f,0.7f,1.f,0.5f};  // R,G,B,A for FOV circle
+static float g_fovCircleCol[4]{0.4f,0.7f,1.f,0.5f};
 static bool g_aimbotTeamChk = true;
-static bool g_aimbotVisCheck = true;   // if true: only aim at pawn under crosshair (m_iIDEntIndex), same resolution as triggerbot
-static int g_aimbotWeaponFilter = 0;  // 0=All 1=Rifles 2=Snipers 3=Pistols
+static bool g_aimbotVisCheck = true;  // цель только под прицелом
+static int g_aimbotWeaponFilter = 0;  // 0 все 1 винтовки 2 снайперки 3 пистолеты
 static bool g_rcsEnabled = false;
 static float g_rcsX = 1.0f;
 static float g_rcsY = 1.0f;
@@ -172,21 +172,20 @@ static bool g_tbTeamChk = true;
 static UINT64 g_tbFireTime = 0;
 static bool g_tbShouldFire = false;
 static bool g_bombDefusing = false;
-static uintptr_t g_bombDefuserPawn = 0;  // pawn who is defusing (for ESP status)
-static bool g_tbJustFired = false;  // Release attack after hold frames
-static int g_tbHoldFramesLeft = 0;  // Hold IN_ATTACK for N frames so game picks it up (internal reads input once per frame)
+static uintptr_t g_bombDefuserPawn = 0;  // кто дефузит
+static bool g_tbJustFired = false;
+static int g_tbHoldFramesLeft = 0;
 static bool g_dtEnabled = false;
 static int g_dtKey = 0;
 static bool g_bhopEnabled = false;
 static bool g_strafeEnabled = false;
 static int g_strafeKey = 0;
-// Anti-aim, edge jump, autopeek removed
-static bool g_nightModeOverlay = false;  // dark fullscreen overlay (ImGui layer)
+static bool g_nightModeOverlay = false;
 static bool g_fovEnabled = false;
 static float g_fovValue = 121.f;
-static bool g_autostopEnabled = true;   // counter-strafe stop before first shot
-static bool g_waitAimThenFire = true;   // block +attack until aimbot on-target (with aim key)
-static float g_waitAimFovDeg = 2.5f;    // max angle delta to count as "locked"
+static bool g_autostopEnabled = true;
+static bool g_waitAimThenFire = true;
+static float g_waitAimFovDeg = 2.5f;
 static float g_aimbotLastBestFov = 1e9f;
 static bool g_aimbotLastFound = false;
 static bool g_snowEnabled = false;
@@ -205,7 +204,7 @@ static float g_handsColor[4]{0.9f,0.9f,0.95f,1.f};
 static bool g_skyColorEnabled = false;
 static float g_skyColor[4]{0.225259f,0.192963f,0.693548f,1.f};
 static bool g_worldColorEnabled = false;
-static float g_worldColor[4]{0.92f, 0.94f, 1.f, 1.f};  // multiply map/prop tint (RGB)
+static float g_worldColor[4]{0.92f, 0.94f, 1.f, 1.f};
 static bool g_watermarkEnabled = true;
 static bool g_showFpsWatermark = true;
 static bool g_spectatorListEnabled = false;
@@ -215,19 +214,19 @@ static bool g_hitSoundEnabled = false;
 static bool g_damageFloatersEnabled = true;
 static float g_damageFloaterDuration = 0.85f;
 static float g_damageFloaterScale = 1.f;
-static int g_damageFloaterAnchor = 0;  // 0=head 1=chest
+static int g_damageFloaterAnchor = 0;  // 0 голова 1 грудь
 static bool g_killEffectEnabled = false;
 static float g_killEffectDuration = 0.6f;
 static UINT64 g_lastKillEffectTime = 0;
-static Vec3 g_lastKillEffectPos{};  // victim head position for kill particles
-static bool g_pendingKillParticles = false;  // spawn 67+LitWare burst on next particle update
-static int g_hitEffectType = 0;   // 0=none 1=cross 2=screen flash 3=circle
-static int g_killEffectType = 1;  // 0=none 1=burst 2=KILL text
+static Vec3 g_lastKillEffectPos{};
+static bool g_pendingKillParticles = false;
+static int g_hitEffectType = 0;   // 0 нет 1 крест 2 вспышка 3 круг
+static int g_killEffectType = 1;  // 0 нет 1 всплеск 2 текст
 static float g_hitEffectCol[4]{1.f,0.9f,0.2f,0.9f};
 static float g_killEffectCol[4]{1.f,0.3f,0.3f,0.95f};
 static int g_hitSoundType = 1;
-static bool g_radarEnabled = true;  // Overlay radar window (separate from in-game minimap)
-static bool g_radarIngame = false;   // Force spot all for in-game minimap (overlay radar removed)
+static bool g_radarEnabled = true;
+static bool g_radarIngame = false;  // радар в игре
 static float g_radarRange = 2000.f;
 static float g_radarSize = 180.f;
 static bool g_bombTimerEnabled = true;
@@ -241,8 +240,8 @@ static bool g_soundBlipTeam = true;
 static float g_soundBlipCol[4]{0.f, 0.419355f, 1.f, 1.f};
 static float g_accentColor[4]{0.1f,0.55f,1.0f,1.0f};
 static float g_menuOpacity = 0.96f;
-static float g_uiScale = 1.00f;  // Default UI scale
-static int g_activeTab = 0;  // 0-3: Aimbot, Visuals, World, Misc
+static float g_uiScale = 1.00f;
+static int g_activeTab = 0;  // 0 аим 1 визуал 2 мир 3 разное
 static float g_tabAnim[8] = {};
 static float g_tabIndicatorY = 0.f;
 static bool g_keybindsEnabled = false;
@@ -250,7 +249,6 @@ static bool g_keybindsWindowOpen = false;
 static float g_menuAnim = 0.f;
 static float g_menuAnimSpeed = 12.f;
 
-// Skins
 struct SkinOverride{
     int weaponId = 0;
     int paintKit = 0;
@@ -324,22 +322,20 @@ static std::vector<std::string> g_configList;
 static int g_lastHealth[ESP_MAX_PLAYERS + 1] = {};
 static bool g_seenThisFrame[ESP_MAX_PLAYERS + 1] = {};
 
-struct LogEntry{char text[256];ImU32 color;float lifetime,maxlife;int type;};  // type: 0=hit 1=kill
+struct LogEntry{char text[256];ImU32 color;float lifetime,maxlife;int type;};  // 0 попадание 1 убийство
 static std::deque<LogEntry>g_logs;
 struct DamageFloater{ int damage; UINT64 spawnMs; float ax, ay; float duration;
-    float wx, wy, wz;   // world position for 3D projection
-    float randOffX;     // random x spread
+    float wx, wy, wz;   // точка в мире
+    float randOffX;
 };
 static std::deque<DamageFloater> g_damageFloaters;
 static DWORD g_lastSoundPingTick[ESP_MAX_PLAYERS + 1] = {};
 static bool g_visMap[ESP_MAX_PLAYERS + 1] = {};
-// Anti-flicker: stale cache / visibility hysteresis (also stabilizes glow on spotted flag)
 static ESPEntry g_esp_stale[ESP_MAX_PLAYERS + 1] = {};
 static UINT64 g_esp_stale_tick[ESP_MAX_PLAYERS + 1] = {};
 static UINT64 g_visLastTrueTick[ESP_MAX_PLAYERS + 1] = {};
 static constexpr DWORD ESP_STALE_MS = 150;
 
-// Math
 static inline float Clampf(float v, float lo, float hi){return v<lo?lo:(v>hi?hi:v);}
 static inline ImVec4 LerpV4(ImVec4 a, ImVec4 b, float t){
     return ImVec4(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t,a.w+(b.w-a.w)*t);
@@ -374,7 +370,6 @@ static inline ImU32 LerpColor(ImU32 a, ImU32 b, float t){
 
 static inline uintptr_t ViewAnglesAddr(){
     if(!g_client) return 0;
-    // cs2-dumper provides dwViewAngles as a client.dll absolute offset (not CInput-relative).
     return g_client + offsets::client::dwViewAngles;
 }
 
@@ -414,39 +409,39 @@ static MaterialColor MakeMatColor(const float col[4]){
 }
 static void ApplyChamsMaterial(float col[4]){
     switch(g_chamsMaterial){
-        case 1: { // Illuminate
+        case 1: {
             col[0] = Clampf(col[0]*1.25f + 0.08f, 0.f, 1.f);
             col[1] = Clampf(col[1]*1.25f + 0.08f, 0.f, 1.f);
             col[2] = Clampf(col[2]*1.25f + 0.08f, 0.f, 1.f);
             col[3] = Clampf(col[3]*1.1f, 0.f, 1.f);
         } break;
-        case 2: { // Latex (softer)
+        case 2: {
             col[0] = LerpF(col[0], 0.85f, 0.2f);
             col[1] = LerpF(col[1], 0.85f, 0.2f);
             col[2] = LerpF(col[2], 0.85f, 0.2f);
             col[3] = Clampf(col[3]*0.9f, 0.f, 1.f);
         } break;
-        case 3: { // Glow
+        case 3: {
             col[0] = Clampf(col[0]*1.1f, 0.f, 1.f);
             col[1] = Clampf(col[1]*1.1f, 0.f, 1.f);
             col[2] = Clampf(col[2]*1.1f, 0.f, 1.f);
             col[3] = Clampf(col[3]*1.25f + 0.15f, 0.f, 1.f);
         } break;
-        case 4: { // Glow2 (pulsing)
+        case 4: {
             float pulse = 0.75f + 0.25f * sinf((float)ImGui::GetTime() * 3.0f);
             col[0] = Clampf(col[0]*pulse + 0.08f, 0.f, 1.f);
             col[1] = Clampf(col[1]*pulse + 0.08f, 0.f, 1.f);
             col[2] = Clampf(col[2]*pulse + 0.08f, 0.f, 1.f);
             col[3] = Clampf(col[3]*1.15f, 0.f, 1.f);
         } break;
-        case 5: { // Metallic (desaturate)
+        case 5: {
             float lum = (col[0] + col[1] + col[2]) / 3.f;
             col[0] = LerpF(col[0], lum, 0.45f);
             col[1] = LerpF(col[1], lum, 0.45f);
             col[2] = LerpF(col[2], lum, 0.45f);
             col[3] = Clampf(col[3]*0.95f, 0.f, 1.f);
         } break;
-        default: break; // 0=white passthrough
+        default: break;
     }
 }
 static constexpr size_t kSceneObjectStride = 0x68;
@@ -482,14 +477,13 @@ static const char* SafeMaterialName(uintptr_t mat){
         void** vtbl = *reinterpret_cast<void***>(mat);
         if(!IsLikelyPtr((uintptr_t)vtbl)) return nullptr;
         using Fn = const char*(__fastcall*)(void*);
-        Fn fn = reinterpret_cast<Fn>(vtbl[0]); // get_name
+        Fn fn = reinterpret_cast<Fn>(vtbl[0]);
         return fn ? fn(reinterpret_cast<void*>(mat)) : nullptr;
     }__except(EXCEPTION_EXECUTE_HANDLER){
         return nullptr;
     }
 }
 
-// Memory
 template<typename T>
 static inline T Rd(uintptr_t addr){
     if(!addr)return T{};__try{return *reinterpret_cast<const T*>(addr);}
@@ -507,11 +501,10 @@ static void RdStr(uintptr_t addr,char*buf,size_t maxlen){
     __except(EXCEPTION_EXECUTE_HANDLER){buf[0]=0;}
 }
 
-// CS2 bone: 32 bytes (alignas 16), pos at 0
 struct BoneData{
     Vec3 pos;
     float scale;
-    char _pad[16];  // quat rotation + padding = 32 total
+    char _pad[16];
 };
 static constexpr size_t BONE_STRIDE = 32;
 
@@ -546,7 +539,6 @@ static bool GetBonePos(uintptr_t pawn,int bone,Vec3& out){
             bones = Rd<uintptr_t>(modelState + offsets::model_state::m_pBones);
         }
     }
-    // No fallback: CGameSceneNode != CSkeletonInstance, mixing offsets causes invalid reads/crash
     if(!bones) return false;
     uintptr_t boneAddr = bones + (uintptr_t)bone * BONE_STRIDE;
     BoneData bd = Rd<BoneData>(boneAddr);
@@ -561,11 +553,9 @@ static void EnsureCalcWorldSpaceBones(){
     g_lastBoneResolve = now;
     HMODULE client = GetModuleHandleA("client.dll");
     if(!client) return;
-    // Primary pattern
     static const char PAT_BONES[] = "\x40\x55\x56\x57\x41\x54\x41\x55\x41\x56\x41\x57\x48\x81\xEC\xD0";
     static const char MSK_BONES[] = "xxxxxxxxxxxxxxxx";
     void* fn = PatternScan(client, PAT_BONES, MSK_BONES);
-    // Fallback patterns for different CS2 builds
     if(!fn){
         static const char PAT2[] = "\x40\x55\x56\x57\x41\x54\x41\x55\x41\x56\x41\x57\x48\x81\xEC\xE0";
         static const char MSK2[] = "xxxxxxxxxxxxxxxx";
@@ -663,7 +653,7 @@ static float GetCurTime(){
     if(!g_client) return 0.f;
     uintptr_t gv = Rd<uintptr_t>(g_client + offsets::client::dwGlobalVars);
     if(!gv) return 0.f;
-    return Rd<float>(gv + 0x30);  // CGlobalVars::m_curtime
+    return Rd<float>(gv + 0x30);
 }
 
 static uintptr_t ResolveHandle(uintptr_t entityList, uint32_t handle){
@@ -715,7 +705,7 @@ struct WeaponInfo{
     const char* name;
     const char* icon;
     int maxClip;
-    ImWchar iconChar;  // CS2GunIcons: 0xE000 + weapon_id, 0 = use text fallback
+    ImWchar iconChar;  // 0 если нет иконки
 };
 
 static WeaponInfo WeaponInfoForId(int id){
@@ -933,7 +923,6 @@ static bool ParseSkinOverride(const std::string& v, SkinOverride& out){
     return true;
 }
 
-// Config load helpers ? split to avoid MSVC "invalid nesting of blocks"
 static bool LoadConfigKeyEsp(const std::string& key, const std::string& val, bool& ok){
     if(key=="esp_enabled"){ g_espEnabled=ParseBool(val); return true; }
     if(key=="esp_draw_box"){ g_espDrawBox=ParseBool(val); return true; }
@@ -1002,7 +991,6 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="fov_circle_col"){ if(!ParseColor4(val,g_fovCircleCol)) ok=false; return true; }
     if(key=="aimbot_team"){ g_aimbotTeamChk=ParseBool(val); return true; }
     if(key=="aimbot_vis"){ g_aimbotVisCheck=ParseBool(val); return true; }
-    // auto_fire removed
     if(key=="wait_aim_fire"){ g_waitAimThenFire=ParseBool(val); return true; }
     if(key=="wait_aim_deg"){ float v; if(ParseFloat(val,v)) g_waitAimFovDeg=v; else ok=false; return true; }
     if(key=="autostop"){ g_autostopEnabled=ParseBool(val); return true; }
@@ -1023,7 +1011,6 @@ static bool LoadConfigKeyMovement(const std::string& key, const std::string& val
     if(key=="bhop"){ g_bhopEnabled=ParseBool(val); return true; }
     if(key=="strafe_enabled"){ g_strafeEnabled=ParseBool(val); return true; }
     if(key=="strafe_key"){ int v; if(ParseInt(val,v)) g_strafeKey=v; else ok=false; return true; }
-    // anti-aim, edge jump, autopeek config keys removed
     if(key=="night_mode_overlay"){ g_nightModeOverlay=ParseBool(val); return true; }
     if(key=="fov_enabled"){ g_fovEnabled=ParseBool(val); return true; }
     if(key=="fov_value"){ float v; if(ParseFloat(val,v)) g_fovValue=v; else ok=false; return true; }
@@ -1132,7 +1119,7 @@ static void ApplyDefaults(){
     g_espWeaponIcon = true;
     g_espAmmo = true;
     g_espMoney = true;
-    g_espMoneyPos = 0;  // 0=below box
+    g_espMoneyPos = 0;
     g_espHeadForward = 6.f;
     g_noFlash = false;
     g_noSmoke = false;
@@ -1173,7 +1160,6 @@ static void ApplyDefaults(){
     g_bhopEnabled = false;
     g_strafeEnabled = false;
     g_strafeKey = 0;
-    // anti-aim, edge jump, autopeek defaults removed
     g_nightModeOverlay = false;
     g_fovEnabled = false;
     g_fovValue = 90.f;
@@ -1319,7 +1305,6 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "bhop", g_bhopEnabled);
     WriteBool(out, "strafe_enabled", g_strafeEnabled);
     WriteInt(out, "strafe_key", g_strafeKey);
-    // anti-aim, edge jump, autopeek save removed
     WriteBool(out, "night_mode_overlay", g_nightModeOverlay);
     WriteBool(out, "fov_enabled", g_fovEnabled);
     WriteFloat(out, "fov_value", g_fovValue);
@@ -1427,11 +1412,9 @@ static bool LoadConfig(const char* name){
 
 static bool GetOofArrowPos(const float* vm, const Vec3& head, int sw, int sh, float& ox, float& oy);
 
-// BuildESPData
 static void BuildESPData(){
     g_esp_count=0;g_esp_oof_count=0;g_esp_local_team=0;g_esp_local_pawn=0;
     g_localOrigin = {};
-    // Visibility throttle: only clear cache when doing full read (every 3rd frame)
     static int s_visFrame = 0;
     if((s_visFrame % 3) == 0) std::fill(std::begin(g_visMap), std::end(g_visMap), false);
     s_visFrame++;
@@ -1450,7 +1433,7 @@ static void BuildESPData(){
         if(w > 100 && h > 100){ sw = w; sh = h; }
     }
     uintptr_t localPawn=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
-    (void)Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerController); // localCtrl reserved
+    (void)Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerController);
     int localTeam=0;Vec3 localOrigin{};
     if(localPawn){localTeam=(int)Rd<uint8_t>(localPawn+offsets::base_entity::m_iTeamNum);
     uintptr_t sc0=Rd<uintptr_t>(localPawn+offsets::base_entity::m_pGameSceneNode);
@@ -1477,7 +1460,6 @@ static void BuildESPData(){
                 vis = g_visMap[i];
             }
         }
-        // Visibility hysteresis: once visible, stay visible (reduces glow/ESP flicker)
         if(i > 0 && i <= ESP_MAX_PLAYERS && vis) g_visLastTrueTick[i] = GetTickCount64();
         UINT64 now = GetTickCount64();
         bool effVis = vis || (i > 0 && i <= ESP_MAX_PLAYERS && (now - g_visLastTrueTick[i]) < ESP_STALE_MS);
@@ -1500,7 +1482,7 @@ static void BuildESPData(){
                 if(GetOofArrowPos(vm,head,sw,sh,ox,oy)){
                     float cx=sw*0.5f, cy=sh*0.5f;
                     float dx=ox-cx, dy=oy-cy;
-                    float angle=atan2f(dx, -dy);  // direction from center toward player
+                    float angle=atan2f(dx, -dy);
                     float*ecol=(team==localTeam)?g_espTeamCol:g_espEnemyCol;
                     g_esp_oof[g_esp_oof_count].x=ox;
                     g_esp_oof[g_esp_oof_count].y=oy;
@@ -1514,11 +1496,11 @@ static void BuildESPData(){
         if(!WorldToScreen(vm,headForward,sw,sh,hfx,hfy)){hfx=hx;hfy=hy;}
         if(!WorldToScreen(vm,origin,sw,sh,fx,fy))continue;
         float boxH = fy - hy;
-        float top = hy - boxH * 0.18f; // Move slightly above head head center
+        float top = hy - boxH * 0.18f;
         boxH = fy - top;
         float boxW = boxH * 0.52f;
         float cx = (hx + fx) * 0.5f;
-        float dist = (origin - localOrigin).length() / 100.f;  // meters
+        float dist = (origin - localOrigin).length() / 100.f;
         uintptr_t namePtr=Rd<uintptr_t>(ctrl+offsets::controller::m_sSanitizedPlayerName);
         float flashDur=Rd<float>(pawn+offsets::cs_pawn_base::m_flFlashDuration);
         ESPEntry&e=g_esp_players[g_esp_count++];
@@ -1544,13 +1526,11 @@ static void BuildESPData(){
         e.feet_x=fx;e.feet_y=fy;
         e.health=health;e.team=team;e.distance=dist;e.yaw=0.f;
         RdName(namePtr,e.name,sizeof(e.name));
-        // Stale cache: keep last-known data for anti-flicker
         g_esp_stale[i] = e;
         g_esp_stale_tick[i] = GetTickCount64();
     }
 }
 
-// Spectator list (help-learn / YouGame.Biz): who's spectating you, or who you're spectating
 static char g_spectatorNames[10][64];
 static int g_spectatorCount = 0;
 static char g_spectatingTarget[64] = {};
@@ -1568,7 +1548,7 @@ static void BuildSpectatorList(){
     int localLife = Rd<uint8_t>(localPawn + offsets::base_entity::m_lifeState);
     uintptr_t localCtrl = Rd<uintptr_t>(g_client + offsets::client::dwLocalPlayerController);
 
-    if(localLife == 0){  // LIFE_ALIVE - find who's spectating us
+    if(localLife == 0){
         for(int i = 1; i < 64; i++){
             uintptr_t chunk = Rd<uintptr_t>(entityList + 8*((i&0x7FFF)>>9) + 16);
             if(!chunk) continue;
@@ -1588,7 +1568,7 @@ static void BuildSpectatorList(){
             if(g_spectatorCount < 10) RdName(namePtr, g_spectatorNames[g_spectatorCount], 64);
             g_spectatorCount++;
         }
-    }else{  // Dead - show who we're spectating
+    }else{
         uintptr_t obsSvc = Rd<uintptr_t>(localPawn + offsets::base_pawn::m_pObserverServices);
         if(obsSvc){
             uint32_t targetHandle = Rd<uint32_t>(obsSvc + offsets::observer::m_hObserverTarget);
@@ -1618,7 +1598,6 @@ static void BuildSpectatorList(){
     }
 }
 
-// Match watermark: outer fill + double stroke + thin top color strip (do not use for DrawWatermark itself).
 static void DrawOverlayWatermarkChrome(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float round){
     const ImU32 colBg = IM_COL32(16,16,16,245);
     const ImU32 colBorder = IM_COL32(64,64,64,220);
@@ -1660,7 +1639,6 @@ static void DrawSpectatorList(float sw){
 
     float yBase = margin;
     if(g_watermarkEnabled){
-        // watermark height: approx 34px + margin
         yBase += 34.f + 8.f;
     }
 
@@ -1671,7 +1649,6 @@ static void DrawSpectatorList(float sw){
     const ImU32 colSep     = IM_COL32(32, 34, 42, 255);
     const ImU32 colRowHov  = IM_COL32(255, 255, 255, 8);
 
-    // === "Spectating: target" pill — shown when we spectate someone ===
     if(g_weAreSpectating && g_spectatingTarget[0]){
         ImVec2 szTarget = fReg->CalcTextSizeA(fReg->LegacySize, FLT_MAX, 0.f, g_spectatingTarget);
         const char* prefix = "WATCHING";
@@ -1691,14 +1668,12 @@ static void DrawSpectatorList(float sw){
 
     if(g_spectatorCount <= 0) return;
 
-    // Measure max name width
     float maxNameW = 60.f;
     for(int i = 0; i < g_spectatorCount; i++){
         ImVec2 ts = fReg->CalcTextSizeA(fReg->LegacySize, FLT_MAX, 0.f, g_spectatorNames[i]);
         if(ts.x > maxNameW) maxNameW = ts.x;
     }
 
-    // Header label + count badge
     const char* hdrLabel = "SPECTATORS";
     ImVec2 szHdr = fBold->CalcTextSizeA(fBold->LegacySize, FLT_MAX, 0.f, hdrLabel);
     char cntBuf[8]; std::snprintf(cntBuf, sizeof(cntBuf), "%d", g_spectatorCount);
@@ -1719,31 +1694,25 @@ static void DrawSpectatorList(float sw){
     dl->AddLine({x+2.f, y+headerH}, {x+boxW-2.f, y+headerH}, colSep, 1.f);
     dl->AddRectFilled({x, y+4.f}, {x+2.f, y+boxH-4.f}, colAccent, 2.f);
 
-    // Header text
     float hMid = y + headerH * 0.5f;
     dl->AddText(fBold, fBold->LegacySize, {x+padX, hMid - szHdr.y*0.5f}, colAccent, hdrLabel);
 
-    // Count badge (pill)
     float badgeX = x + boxW - padX - badgeW;
     float badgeY = hMid - badgeH * 0.5f;
     dl->AddRectFilled({badgeX, badgeY}, {badgeX+badgeW, badgeY+badgeH}, colAccentD, badgeH*0.5f);
     dl->AddText(fReg, fReg->LegacySize, {badgeX + (badgeW-szCnt.x)*0.5f, badgeY + (badgeH-szCnt.y)*0.5f}, IM_COL32(255,255,255,230), cntBuf);
 
-    // Entries
     for(int i = 0; i < g_spectatorCount; i++){
         float ey = y + headerH + 1.f + (float)i * lineH;
         float eMid = ey + lineH * 0.5f;
 
-        // Subtle row hover highlight for even rows
         if(i % 2 == 0)
             dl->AddRectFilled({x+1.f, ey}, {x+boxW-1.f, ey+lineH}, colRowHov);
 
-        // Index dot
         char idxBuf[4]; std::snprintf(idxBuf, sizeof(idxBuf), "%d", i+1);
         ImVec2 szIdx = fReg->CalcTextSizeA(fReg->LegacySize, FLT_MAX, 0.f, idxBuf);
         dl->AddText(fReg, fReg->LegacySize, {x+padX, eMid - szIdx.y*0.5f}, colDim, idxBuf);
 
-        // Name
         dl->AddText(fReg, fReg->LegacySize, {x+padX+18.f, eMid - szIdx.y*0.5f}, colText, g_spectatorNames[i]);
     }
 }
@@ -1772,7 +1741,6 @@ static void ProcessHitEvents(){
                 df.ax = e.head_x;
                 df.ay = e.head_y;
                 df.duration = g_damageFloaterDuration;
-                // Store world position (head in world space, slight up offset)
                 df.wx = e.head_ox;
                 df.wy = e.head_oy;
                 df.wz = e.head_oz + 8.f;
@@ -1807,7 +1775,7 @@ static void RunNoFlash(){
         uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
         if(!lp||!IsLikelyPtr(lp))return;
         uintptr_t flashAddr=lp+offsets::cs_pawn_base::m_flFlashDuration;
-        if(!IsLikelyPtr((uintptr_t)flashAddr))return;  // avoid writing to obviously bad addr
+        if(!IsLikelyPtr((uintptr_t)flashAddr))return;
         float dur=Rd<float>(flashAddr);
         if(dur>0.01f){
             Wr<float>(flashAddr,0.f);
@@ -1819,10 +1787,8 @@ static void RunNoFlash(){
 static void RunNoSmoke(){
     if(!g_noSmoke||!g_client) return;
     __try{
-        // Approach 1: Zero smoke overlay alpha on local pawn (per-player smoke visibility)
         uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
         if(lp&&IsLikelyPtr(lp)) Wr<float>(lp+offsets::cs_pawn_base::m_flLastSmokeOverlayAlpha,0.f);
-        // Approach 2: Set entity alpha via ClientAlphaProperty on smoke projectiles
         UINT64 now = GetTickCount64();
         if(now - g_lastNoSmokeTick < 100) return;
         g_lastNoSmokeTick = now;
@@ -1896,7 +1862,6 @@ static void RunGlow(){
             if(applyChams){
                 ApplyChamsMaterial(tmp);
             }else if(isTeam){
-                // Teammates: menu is RGB-only (NoAlpha on picker); strength = global glow alpha if RGB non-black
                 float sumRgb = tmp[0] + tmp[1] + tmp[2];
                 tmp[3] = (sumRgb < 1e-4f) ? 0.f : Clampf(g_glowAlpha, 0.f, 1.f);
             }else{
@@ -1911,7 +1876,6 @@ static void RunGlow(){
     }
 }
 
-// In-game radar hack: force m_bSpotted so enemies appear on the built-in minimap
 static void RunRadarHack(){
     if(!g_radarIngame||!g_client)return;
     uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
@@ -1927,7 +1891,7 @@ static void RunRadarHack(){
         if(!pawn||pawn==localPawn)continue;
         int health=Rd<int>(pawn+offsets::base_entity::m_iHealth);if(health<=0)continue;
         int team=(int)Rd<uint8_t>(pawn+offsets::base_entity::m_iTeamNum);
-        if(team==localTeam)continue;  // Only force spot enemies
+        if(team==localTeam)continue;
         uintptr_t spotBase=pawn+offsets::spotted::m_entitySpottedState;
         Wr<uint8_t>(spotBase+offsets::spotted::m_bSpotted, 1);
         Wr<uint32_t>(spotBase+offsets::spotted::m_bSpottedByMask, 0xFFFFFFFF);
@@ -1947,7 +1911,7 @@ static void EnsureSkinRegen(){
 }
 
 static void RunSkinChanger(){
-    return; // temporarily disabled
+    return;
     if(!g_client) return;
     if(!g_skinEnabled){
         if(g_skinForceUpdate){
@@ -1994,7 +1958,7 @@ static void RunAutostop(){
     if(!aimHeld || !fireHeld) return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     int shots = Rd<int>(lp + offsets::cs_pawn::m_iShotsFired);
-    if(shots > 0) return;  // only before the first shot of a click (counter-strafe tap-in)
+    if(shots > 0) return;
     uintptr_t vaAddr = ViewAnglesAddr();
     if(!vaAddr) return;
     __try{
@@ -2013,7 +1977,6 @@ static void RunAutostop(){
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
 
-// Bunnyhop: auto-jump when holding space. On ground=65537, in air=256 (per blast.hk/internal cheat convention)
 static void DrawDebugConsole() {
     if (!g_showDebugConsole) return;
     ImGui::SetNextWindowSize({ 500, 400 }, ImGuiCond_FirstUseEver);
@@ -2032,8 +1995,6 @@ static void DrawDebugConsole() {
     ImGui::End();
 }
 
-// Bunnyhop: suppress jump when in the air so each landing = fresh press.
-// CS2 sub-tick: write 65537 on the landing frame; write 0 in-air.
 static void RunBHop(){
     if(!g_bhopEnabled||!g_client)return;
     if(g_menuOpen){ Wr<int>(g_client+offsets::buttons::jump, 0); return; }
@@ -2044,15 +2005,11 @@ static void RunBHop(){
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp)return;
     bool onGround = (Rd<uint32_t>(lp+offsets::base_entity::m_fFlags) & 1) != 0;
 
-    // On ground: inject jump (65537 = pressed+toggled); in air: suppress (0)
     Wr<int>(g_client+offsets::buttons::jump, onGround ? 65537 : 0);
 }
 
-// RunEdgeJump removed
 
-// RunAutoPeek removed
 
-// RunAntiAim removed
 
 static void RunFOVChanger(){
     if(!g_fovEnabled||!g_client)return;
@@ -2075,7 +2032,6 @@ static void RunRCS(){
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
 
     if(!shooting || shots<1){
-        // Track current punch so delta=0 on the first active frame (no spike)
         g_rcsPrevPunchX=punchX;
         g_rcsPrevPunchY=punchY;
         return;
@@ -2086,11 +2042,10 @@ static void RunRCS(){
     g_rcsPrevPunchX=punchX;
     g_rcsPrevPunchY=punchY;
 
-    if(dx==0.f&&dy==0.f)return; // punch didn't change this frame
+    if(dx==0.f&&dy==0.f)return;
 
     uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
     float pitch=Rd<float>(vaAddr);float yaw=Rd<float>(vaAddr+4);
-    // Apply full punch delta * 2.0 (CS2 punch multiplier)
     pitch-=dx*2.f;
     yaw -=dy*2.f;
     pitch=Clampf(pitch,-89.f,89.f);
@@ -2099,13 +2054,12 @@ static void RunRCS(){
     Wr<float>(vaAddr+4,yaw);
 }
 
-// Auto Strafe: optimal yaw turn for max air speed gain (sv_airaccelerate/speed formula)
 static void RunStrafeHelper(){
     if(!g_strafeEnabled||!g_client) return;
     if(g_menuOpen) return;
     if(g_strafeKey!=0&&!(GetAsyncKeyState(g_strafeKey)&0x8000)) return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp) return;
-    if(Rd<uint32_t>(lp+offsets::base_entity::m_fFlags)&1) return;  // On ground - no strafe
+    if(Rd<uint32_t>(lp+offsets::base_entity::m_fFlags)&1) return;
     
     uintptr_t vaAddr=ViewAnglesAddr(); if(!vaAddr) return;
     float curYaw=Rd<float>(vaAddr+4);
@@ -2117,56 +2071,52 @@ static void RunStrafeHelper(){
     if(fabsf(delta) < 0.1f) return;
 
     if(delta > 0.f){
-        // Turning left → press A, release D
         Wr<int>(g_client+offsets::buttons::left,  65537);
         Wr<int>(g_client+offsets::buttons::right, 0);
     } else {
-        // Turning right → press D, release A
         Wr<int>(g_client+offsets::buttons::right, 65537);
         Wr<int>(g_client+offsets::buttons::left,  0);
     }
 }
 
-// Entity list stride (Source2: often 112/0x70; if trigger stops working after game update try 120/0x78)
 static constexpr int kEntityListStride = 112;
 static void RunTriggerBot(){
     if(!g_tbEnabled||!g_client)return;
     if(g_tbKey!=0&&!(GetAsyncKeyState(g_tbKey)&0x8000)){g_tbShouldFire=false;return;}
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     int entIdx=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
-    if(entIdx<=0||entIdx>8192){g_tbShouldFire=false;return;}  // CEntityIndex: 0 or -1 = none, sanity cap
+    if(entIdx<=0||entIdx>8192){g_tbShouldFire=false;return;}
     uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
     uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((entIdx&0x7FFF)>>9)+16);if(!pchunk)return;
     uintptr_t targPawn=Rd<uintptr_t>(pchunk+kEntityListStride*(entIdx&0x1FF));
     if(!targPawn||!IsLikelyPtr(targPawn)){g_tbShouldFire=false;return;}
     int lifeState=Rd<uint8_t>(targPawn+offsets::base_entity::m_lifeState);
-    if(lifeState!=0){g_tbShouldFire=false;return;}  // 0 = alive
+    if(lifeState!=0){g_tbShouldFire=false;return;}
     int targTeam=(int)Rd<uint8_t>(targPawn+offsets::base_entity::m_iTeamNum);
     int targHealth=Rd<int>(targPawn+offsets::base_entity::m_iHealth);
     if(targHealth<=0){g_tbShouldFire=false;return;}
     if(g_tbTeamChk&&targTeam==g_esp_local_team){g_tbShouldFire=false;return;}
     if(!g_tbShouldFire){g_tbShouldFire=true;g_tbFireTime=GetTickCount64()+(UINT64)g_tbDelay;}
     if(GetTickCount64()>=g_tbFireTime){
-        Wr<int>(g_client+offsets::buttons::attack,65537);  // Press
+        Wr<int>(g_client+offsets::buttons::attack,65537);
         g_tbShouldFire=false;
         g_tbJustFired=true;
-        g_tbHoldFramesLeft=4;  // Hold 4 frames so game input sees it (internal processes input once per frame)
+        g_tbHoldFramesLeft=4;
     }
 }
 
 static void ReleaseTriggerAttack(){
     if(!g_client||!g_tbEnabled)return;
     if(g_tbJustFired && g_tbHoldFramesLeft>0){
-        Wr<int>(g_client+offsets::buttons::attack,65537);  // Keep pressed
+        Wr<int>(g_client+offsets::buttons::attack,65537);
         g_tbHoldFramesLeft--;
         return;
     }
     if(g_tbJustFired){
-        Wr<int>(g_client+offsets::buttons::attack,256);  // Release
+        Wr<int>(g_client+offsets::buttons::attack,256);
         g_tbJustFired=false;
         return;
     }
-    // Do not override user input when triggerbot is idle.
 }
 
 static void RunAimbot(){
@@ -2192,7 +2142,6 @@ static void RunAimbot(){
         float fovDist=sqrtf(dPitch*dPitch+dYaw*dYaw);
         if(fovDist<bestDist){bestDist=fovDist;bestPoint=p;found=true;}
     };
-    // Crosshair pawn — same entity resolution as RunTriggerBot (m_iIDEntIndex + entity list)
     uintptr_t crossPawn = 0;
     if(g_aimbotVisCheck){
         int crossIdx = Rd<int>(lp + offsets::cs_pawn::m_iIDEntIndex);
@@ -2210,7 +2159,6 @@ static void RunAimbot(){
         if(Rd<int>(crossPawn + offsets::base_entity::m_iHealth) <= 0) return;
         if(g_aimbotTeamChk && (int)Rd<uint8_t>(crossPawn + offsets::base_entity::m_iTeamNum) == g_esp_local_team) return;
     }
-    // Path 1: use ESP cache (filled by BuildESPData same frame)
     for(int i=0;i<g_esp_count;i++){
         const ESPEntry&e=g_esp_players[i];
         if(!e.valid||!e.pawn||!IsLikelyPtr(e.pawn))continue;
@@ -2225,7 +2173,6 @@ static void RunAimbot(){
         { Vec3 bp{}; if(getBone(BONE_HEAD,bp)) aimPoint=bp; }
         evalPoint(aimPoint);
     }
-    // Path 2: if no ESP entries, iterate entity list directly (like TempleWare)
     if(!found){
         uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
         int localTeam=(int)Rd<uint8_t>(lp+offsets::base_entity::m_iTeamNum);
@@ -2234,7 +2181,7 @@ static void RunAimbot(){
             for(int i=1;i<64;i++){
                 uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16); if(!chunk)continue;
                 uintptr_t ctrl=Rd<uintptr_t>(chunk+kEntityListStride*(i&0x1FF)); if(!ctrl||!IsLikelyPtr(ctrl))continue;
-                if(ctrl==localCtrl)continue;  // skip self
+                if(ctrl==localCtrl)continue;
                 if(!Rd<bool>(ctrl+offsets::controller::m_bPawnIsAlive))continue;
                 uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn); if(!ph)continue;
                 uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16); if(!pchunk)continue;
@@ -2270,7 +2217,6 @@ static void RunAimbot(){
 
 }
 
-// RunRagebot removed
 
 static void RunDoubleTap(){
     if(!g_dtEnabled||!g_client) return;
@@ -2307,7 +2253,7 @@ struct BulletTrace{Vec3 start,end;float lifetime,maxlife;ImU32 color;};
 static std::deque<BulletTrace>g_traces;
 static int g_lastShotsFired = 0;
 
-struct SoundPing{Vec3 pos;float lifetime,maxlife;float radius;float height;};  // height for 3D vertical marker
+struct SoundPing{Vec3 pos;float lifetime,maxlife;float radius;float height;};
 static std::deque<SoundPing>g_soundPings;
 
 static bool g_bombActive=false;
@@ -2320,7 +2266,6 @@ static float g_lastBombScan=0.f;
 static void PushNotification(const char*text,ImU32 color){
     (void)color;
     if(!text||!text[0])return;
-    // Toasts disabled (were top-right sliding popups).
 }
 
 static void PlayHitSound(int type){
@@ -2382,11 +2327,9 @@ static void DrawBulletTraces(float dt){
         float sx,sy,ex,ey;
         if(WorldToScreen(vm,t.start,g_esp_screen_w,g_esp_screen_h,sx,sy)&&WorldToScreen(vm,t.end,g_esp_screen_w,g_esp_screen_h,ex,ey)){
             uint8_t r=(t.color>>IM_COL32_R_SHIFT)&0xFF, gc=(t.color>>IM_COL32_G_SHIFT)&0xFF, b=(t.color>>IM_COL32_B_SHIFT)&0xFF;
-            // Glow layers: outer (wide+dim), mid, inner bright
             dl->AddLine({sx,sy},{ex,ey}, IM_COL32(r,gc,b,(int)(40*a)),  7.f);
             dl->AddLine({sx,sy},{ex,ey}, IM_COL32(r,gc,b,(int)(80*a)),  3.5f);
             dl->AddLine({sx,sy},{ex,ey}, IM_COL32(r,gc,b,(int)(220*a)), 1.2f);
-            // Bright endpoint dot at impact
             dl->AddCircleFilled({ex,ey}, 3.5f*a, IM_COL32(r,gc,b,(int)(180*a)), 8);
             dl->AddCircleFilled({ex,ey}, 1.5f*a, IM_COL32(255,255,255,(int)(180*a)), 8);
         }
@@ -2447,7 +2390,6 @@ static void DrawSoundPings(float dt){
             }
         }
         if(validCount < 3) continue;
-        // Intense glow: more rings, brighter alpha, thicker lines
         for(int ring = 9; ring >= 0; ring--){
             float rMul = 0.15f + (float)ring * 0.09f;
             int a = (int)((160 - ring*10) * alpha);
@@ -2484,8 +2426,8 @@ static void DrawLogs(float dt,float sw,float sh){
     ImFont* mainFont=font::bold?font::bold:ImGui::GetFont();
     ImFont* iconFont=font::icomoon;
     float cx=sw*0.5f,cy=sh*0.5f,y=cy+28.f;
-    static const char hitIcon[] = "\xee\x80\x81";   // crosshair (icomoon PUA)
-    static const char killIcon[] = "\xee\x80\x82";  // skull (icomoon PUA)
+    static const char hitIcon[] = "\xee\x80\x81";
+    static const char killIcon[] = "\xee\x80\x82";
     for(auto& l: g_logs){
         l.lifetime-=dt;
         float a=Clampf(l.lifetime/l.maxlife,0.f,1.f);
@@ -2509,7 +2451,6 @@ static void DrawLogs(float dt,float sw,float sh){
     g_logs.erase(std::remove_if(g_logs.begin(),g_logs.end(),[](const LogEntry& l){return l.lifetime<=0.f;}),g_logs.end());
 }
 
-// Bomb timer only shown when player is within this distance (avoids stale data when entity is dormant)
 static const float g_bombTimerMaxDist = 1500.f;
 
 static void UpdateBombInfo(){
@@ -2528,7 +2469,6 @@ static void UpdateBombInfo(){
         if(blow<=0.f) continue;
         uintptr_t scn = Rd<uintptr_t>(ent+offsets::base_entity::m_pGameSceneNode);
         if(scn) g_bombPos = Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
-        // Only consider active when player is near bomb (far entities are dormant, timer data is stale)
         float dx = g_bombPos.x - g_localOrigin.x, dy = g_bombPos.y - g_localOrigin.y;
         if(dx*dx + dy*dy > g_bombTimerMaxDist*g_bombTimerMaxDist) continue;
         g_bombActive=true;
@@ -2548,8 +2488,8 @@ static void DrawBombTimer(float sw){
     if(!g_bombTimerEnabled||!g_bombActive) return;
     float now = GetCurTime();
     float tLeft = g_bombExplodeTime - now;
-    if(tLeft <= 0.f) return;  // bomb exploded, hide timer
-    if(tLeft > 42.f) return;  // invalid/stale data (bomb is 40s max)
+    if(tLeft <= 0.f) return;
+    if(tLeft > 42.f) return;
     char tail[96];
     if(g_bombDefusing){
         float dLeft = g_bombDefuseEnd - now;
@@ -2718,17 +2658,14 @@ static void PidoSection(const char* title){
     float width = ImGui::GetContentRegionAvail().x;
     if(width < 4.f) return;
 
-    // Lightweight sub-section divider — compact horizontal rule + dim label
     const float h    = 20.f * s;
     const float fpx  = 9.f * s;
     ImDrawList* dl   = ImGui::GetWindowDrawList();
     ImFont* reg      = font::regular ? font::regular : ImGui::GetFont();
     float midY       = pos.y + h * 0.5f;
 
-    // Full-width thin hairline
     dl->AddLine({pos.x+2.f*s, midY}, {pos.x+width-2.f*s, midY}, IM_COL32(48,51,68,50));
 
-    // Accent dot + dim text (no background rect)
     ImVec2 tsz = reg->CalcTextSizeA(fpx, FLT_MAX, 0.f, title);
     float lx   = pos.x + 10.f * s;
     dl->AddCircleFilled({lx, midY}, 1.5f*s, WithAlpha(g_pido.accent, 0.7f), 8);
@@ -2748,11 +2685,8 @@ static bool BeginPidoChild(const char* id, const ImVec2& size){
     ImVec2 sw = ImGui::GetWindowSize();
     const float rnd = g_skeetUi.childRounding * scale;
     dl->AddRectFilled(p, {p.x+sw.x, p.y+sw.y}, g_pido.elemBg, rnd);
-    // Outer border — subtle blue-gray
     dl->AddRect(p, {p.x+sw.x, p.y+sw.y}, g_pido.elemStroke, rnd, 0, 1.f);
-    // Inner dark border — slight blue tint
     dl->AddRect({p.x+1.f, p.y+1.f}, {p.x+sw.x-1.f, p.y+sw.y-1.f}, IM_COL32(8, 8, 12, 180), rnd, 0, 1.f);
-    // Glass top-edge highlight — creates premium "raised panel" depth
     dl->AddLine({p.x+3.f, p.y+1.f}, {p.x+sw.x-3.f, p.y+1.f}, IM_COL32(255, 255, 255, 14));
     return open;
 }
@@ -2763,14 +2697,12 @@ static void EndPidoChild(){
     ImGui::PopStyleVar(2);
 }
 
-// Tab generation counter — incremented on tab switch to reset group entrance anims
 static int g_grpGeneration = 0;
 
 static bool BeginPidoGroup(const char* id, const char* title, const ImVec2& size){
     float s = MenuScale();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.f*s, 2.f*s));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(0.f,   2.f*s));
-    // NoScrollWithMouse — SmoothScrollCurrentWindow handles wheel exclusively
     bool open = ImGui::BeginChild(id, size, false,
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::SetWindowFontScale(s);
@@ -2779,17 +2711,14 @@ static bool BeginPidoGroup(const char* id, const char* title, const ImVec2& size
     ImVec2 sw = ImGui::GetWindowSize();
     const float rnd = 4.f * s;
 
-    // Entrance fade-in — keyed on (id ^ generation) so it resets on tab switch
     static std::unordered_map<ImGuiID, float> s_grpAnims;
     ImGuiID gid = ImGui::GetID(id) ^ (ImGuiID)(g_grpGeneration * 0x9e3779b9u);
     float& ga = s_grpAnims[gid];
     ga = LerpF(ga, 1.f, 1.f - expf(-10.f * ImGui::GetIO().DeltaTime));
 
-    // Panel background + border
     dl->AddRectFilled(p, {p.x+sw.x, p.y+sw.y}, WithAlpha(g_pido.elemBg, ga), rnd);
     dl->AddRect(p, {p.x+sw.x, p.y+sw.y}, WithAlpha(g_pido.elemStroke, ga), rnd, 0, 1.f);
 
-    // Title row inside the group: centered text + thin separator below
     ImFont* reg = font::regular ? font::regular : ImGui::GetFont();
     const float fpx = 9.f * s;
     const float titleH = 18.f * s;
@@ -2809,7 +2738,7 @@ static void EndPidoGroup(){
     ImGui::PopStyleVar(2);
 }
 
-static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, bool selected, float forceW = 0.f){
+static bool PidoTab(const char* icon, const char* label, const char*, bool selected, float forceW = 0.f){
     ImGui::PushID(label);
     float s = MenuScale();
     ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -2822,25 +2751,21 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Animated selection indicator (must be before first use)
     static std::unordered_map<ImGuiID, float> s_tabDotAnims;
     ImGuiID dotId = ImGui::GetID("##dot");
     float& dotAnim = s_tabDotAnims[dotId];
     dotAnim = LerpF(dotAnim, selected ? 1.f : 0.f, 1.f - expf(-14.f * ImGui::GetIO().DeltaTime));
 
-    // Animated bg: blends from transparent to selection color
     ImU32 rowBg = hovered && !selected ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
     dl->AddRectFilled(pos, {pos.x+width, pos.y+height}, rowBg, 0.f);
     if(selected || dotAnim > 0.01f)
         dl->AddRectFilled(pos, {pos.x+width, pos.y+height},
             IM_COL32(28, 30, 42, (int)(255.f*dotAnim)), 0.f);
 
-    // Left accent bar — selected only, thicker
     if(selected || dotAnim > 0.01f)
         dl->AddRectFilled({pos.x, pos.y+8.f*s}, {pos.x+3.5f*s*dotAnim, pos.y+height-8.f*s},
             WithAlpha(g_pido.accent, dotAnim), 2.f);
 
-    // Thin bottom separator between tabs
     dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f},
         IM_COL32(255, 255, 255, 8));
 
@@ -2850,7 +2775,6 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
     float midY = pos.y + height * 0.5f;
     ImU32 dotCol = LerpColor(IM_COL32(50, 52, 64, 200), g_pido.accent, dotAnim);
 
-    // Geometric tab icons — drawn per index encoded in icon string ("0".."4")
     float tx = pos.x + 32.f*s;
     if(icon && icon[0] >= '0' && icon[0] <= '4'){
         int idx = icon[0] - '0';
@@ -2859,7 +2783,7 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
         ImU32 ic  = LerpColor(IM_COL32(70,73,95,220), g_pido.accent, dotAnim);
         ImU32 ic2 = LerpColor(IM_COL32(50,52,68,180), g_pido.accent, dotAnim * 0.6f);
         switch(idx){
-        case 0: { // Aimbot: crosshair — circle + 4 outer ticks + center dot
+        case 0: {
             const float tickLen = 2.8f*s, gap2 = 1.6f*s;
             dl->AddCircle({cx,midY}, r, ic, 24, 1.f*s);
             dl->AddLine({cx-r-tickLen, midY}, {cx-r-gap2, midY}, ic, 1.f*s);
@@ -2868,10 +2792,9 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
             dl->AddLine({cx, midY+r+gap2}, {cx, midY+r+tickLen}, ic, 1.f*s);
             dl->AddCircleFilled({cx,midY}, 1.6f*s, ic, 8);
         }   break;
-        case 1: { // Visuals: eye — two arcs forming eyelid shape + filled pupil
+        case 1: {
             const int NS = 20;
             float eyeRx = r + 1.f*s, eyeRy = r * 0.55f;
-            // Upper arc (top of eye)
             for(int i=0;i<NS;i++){
                 float a0 = 3.14159265f + (float)i/(float)NS * 3.14159265f;
                 float a1 = 3.14159265f + (float)(i+1)/(float)NS * 3.14159265f;
@@ -2879,7 +2802,6 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
                     {cx + cosf(a0)*eyeRx, midY + sinf(a0)*eyeRy},
                     {cx + cosf(a1)*eyeRx, midY + sinf(a1)*eyeRy}, ic, 1.f*s);
             }
-            // Lower arc (bottom of eye)
             for(int i=0;i<NS;i++){
                 float a0 = (float)i/(float)NS * 3.14159265f;
                 float a1 = (float)(i+1)/(float)NS * 3.14159265f;
@@ -2889,18 +2811,15 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
             }
             dl->AddCircleFilled({cx, midY}, r*0.32f, ic, 12);
         }   break;
-        case 2: { // World: globe — circle + 2 horizontal latitude lines + vertical meridian
+        case 2: {
             dl->AddCircle({cx,midY}, r, ic, 24, 1.f*s);
-            // Latitude lines at +/-r*0.45
             float latY1 = midY - r*0.45f, latY2 = midY + r*0.45f;
             float hw1 = sqrtf(r*r - (r*0.45f)*(r*0.45f));
             dl->AddLine({cx-hw1, latY1},{cx+hw1, latY1}, ic2, 0.8f*s);
             dl->AddLine({cx-hw1, latY2},{cx+hw1, latY2}, ic2, 0.8f*s);
-            // Vertical meridian
             dl->AddLine({cx, midY-r},{cx, midY+r}, ic2, 0.8f*s);
         }   break;
-        // case 3 (Skins) removed
-        case 3: { // Misc: gear — inner circle + 6 rectangular teeth
+        case 3: {
             float ri = r*0.42f, ro = r*0.72f;
             dl->AddCircle({cx,midY}, ri, ic, 16, 1.f*s);
             const int TEETH = 6;
@@ -2916,7 +2835,6 @@ static bool PidoTab(const char* icon, const char* label, const char* /*desc*/, b
         }   break;
         }
     } else {
-        // Fallback: animated dot
         dl->AddCircleFilled({pos.x + 11.f*s, midY}, 2.5f*s, dotCol, 12);
         tx = pos.x + 20.f*s;
     }
@@ -2953,7 +2871,6 @@ static bool PidoToggle(const char* label, const char* desc, bool* v){
     const char* labelEnd = LabelTextEnd(label);
     float midY = pos.y + height * 0.5f;
 
-    // Left square toggle
     const float sqSz = 8.f * s;
     const float sqX  = pos.x + 8.f*s;
     const float sqY  = midY - sqSz * 0.5f;
@@ -2988,14 +2905,12 @@ static bool PidoSliderFloat(const char* label, const char* desc, float* v, float
     float midY = pos.y + height * 0.5f;
     bool hovered = ImGui::IsMouseHoveringRect(pos, {pos.x+width, pos.y+height});
 
-    // Geometry
     const float btnSz = 12.f*s, trackW = 80.f*s, trackH = 3.f*s, gp = 4.f*s, rp = 8.f*s;
     float plusL  = pos.x + width - rp - btnSz;
     float trackR = plusL - gp;
     float trackL = trackR - trackW;
     float minusL = trackL - gp - btnSz;
 
-    // Plus/minus invisible buttons
     ImGui::SetCursorScreenPos({plusL, pos.y});
     ImGui::InvisibleButton("##plus", ImVec2(btnSz, height));
     bool plusHov = ImGui::IsItemHovered();
@@ -3008,7 +2923,6 @@ static bool PidoSliderFloat(const char* label, const char* desc, float* v, float
     bool minusClicked = ImGui::IsItemClicked();
     if(minusClicked) *v = Clampf(*v - (v_max-v_min)/100.f, v_min, v_max);
 
-    // Track drag
     ImGui::SetCursorScreenPos({trackL, pos.y});
     ImGui::InvisibleButton("##track", ImVec2(trackW, height));
     bool trackActive = ImGui::IsItemActive();
@@ -3024,20 +2938,16 @@ static bool PidoSliderFloat(const char* label, const char* desc, float* v, float
     const char* labelEnd = LabelTextEnd(label);
     dl->AddText(reg, 11.f*s, {pos.x+8.f*s, midY-reg->LegacySize*s*0.5f}, g_pido.text, label, labelEnd);
 
-    // Track bg
     dl->AddRectFilled({trackL, midY-trackH*0.5f}, {trackR, midY+trackH*0.5f}, IM_COL32(28,28,42,255), trackH*0.5f);
-    // Track fill
     float t = Clampf((*v - v_min) / (v_max - v_min), 0.f, 1.f);
     float fillX = trackL + t * trackW;
     if(fillX > trackL)
         dl->AddRectFilled({trackL, midY-trackH*0.5f}, {fillX, midY+trackH*0.5f}, g_pido.accent, trackH*0.5f);
 
-    // Value above track, centered
     char valBuf[32]; std::snprintf(valBuf, sizeof(valBuf), format, *v);
     ImVec2 vSz = reg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, valBuf);
     dl->AddText(reg, 9.f*s, {trackL+(trackW-vSz.x)*0.5f, midY-trackH*0.5f-vSz.y-1.f*s}, g_pido.textDim, valBuf);
 
-    // -/+ symbols
     ImVec2 mSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, "-");
     ImVec2 pSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, "+");
     dl->AddText(reg, 11.f*s, {minusL+(btnSz-mSz.x)*0.5f, midY-mSz.y*0.5f},
@@ -3126,7 +3036,6 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     float width = ImGui::GetContentRegionAvail().x;
     float height = g_skeetUi.rowHeight * s;
 
-    // Full-row invisible button
     ImGui::InvisibleButton("##row", ImVec2(width, height));
     bool rowHovered  = ImGui::IsItemHovered();
     bool rowClicked  = ImGui::IsItemClicked();
@@ -3135,10 +3044,8 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     ImVec2 bbMin = pos, bbMax{pos.x+width, pos.y+height};
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Row background — flat, no individual border
     ImU32 rowBg = rowHovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
     dl->AddRectFilled(bbMin, bbMax, rowBg, 2.f*s);
-    // Thin separator at row bottom
     dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::bold ? font::bold : ImGui::GetFont();
@@ -3147,7 +3054,6 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     float midY = pos.y + height * 0.5f;
     dl->AddText(bold, 12.f*s, {pos.x+8.f*s, midY - 6.f*s}, g_pido.textActive, label, labelEnd);
 
-    // Right-side chip showing current selection
     const char* curItem = (*current_item >= 0 && *current_item < items_count) ? items[*current_item] : "";
     const float chipPadX = 7.f*s, chipPadY = 2.f*s, chipRnd = 4.f*s, arrowW = 10.f*s;
     ImVec2 chipSz = reg->CalcTextSizeA(11.f*s, FLT_MAX, 0.f, curItem);
@@ -3159,19 +3065,16 @@ static bool PidoCombo(const char* label, const char* desc, int* current_item, co
     dl->AddRect({chipX, chipY}, {chipX+chipW, chipY+chipH}, WithAlpha(g_pido.accent, 0.35f), chipRnd, 0, 1.f);
     dl->AddText(reg, 11.f*s, {chipX+chipPadX, chipY+chipPadY}, g_pido.text, curItem);
 
-    // Open popup on row click
     const char* popupId = "##pido_combo_popup";
     if(rowClicked) ImGui::OpenPopup(popupId);
     bool popup_open = ImGui::IsPopupOpen(popupId);
 
-    // Chevron (flips when open)
     float ax = chipX + chipW - arrowW*0.5f - 2.f*s;
     if(popup_open)
         dl->AddTriangleFilled({ax-3.f*s,midY+2.f*s},{ax+3.f*s,midY+2.f*s},{ax,midY-2.f*s}, g_pido.textDim);
     else
         dl->AddTriangleFilled({ax-3.f*s,midY-2.f*s},{ax+3.f*s,midY-2.f*s},{ax,midY+2.f*s}, g_pido.textDim);
 
-    // Popup
     ImGui::SetNextWindowPos({pos.x, bbMax.y + 2.f*s});
     ImGui::SetNextWindowSize({width, 0.f});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(5.f*s, 5.f*s));
@@ -3229,7 +3132,6 @@ static bool PidoColorEdit4(const char* label, const char* desc, float col[4], Im
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImU32 rowBg = hovered ? IM_COL32(255,255,255,6) : IM_COL32(0,0,0,0);
     dl->AddRectFilled(bbMin, bbMax, rowBg, 2.f*s);
-    // Thin separator at row bottom
     dl->AddLine({pos.x+6.f*s, pos.y+height-0.5f}, {pos.x+width-6.f*s, pos.y+height-0.5f}, IM_COL32(255,255,255,12));
 
     ImFont* bold = font::bold ? font::bold : ImGui::GetFont();
@@ -3237,11 +3139,9 @@ static bool PidoColorEdit4(const char* label, const char* desc, float col[4], Im
     float midY = pos.y + height * 0.5f;
     dl->AddText(bold, 13.f*s, {pos.x+12.f*s, midY - 6.5f*s}, g_pido.textActive, label, labelEnd);
 
-    // Color swatch — square, with checkerboard for alpha, rounded
     const float swW = 22.f*s, swH = 22.f*s, swRnd = 4.f*s;
     float swX = bbMax.x - swW - 10.f*s;
     float swY = midY - swH*0.5f;
-    // Checkerboard pattern for transparency (8 squares in 2 rows of 4)
     ImU32 chk1 = IM_COL32(60,60,60,255), chk2 = IM_COL32(40,40,40,255);
     float cw = swW / 4.f, ch = swH / 2.f;
     for(int ci=0; ci<4; ci++){
@@ -3249,7 +3149,6 @@ static bool PidoColorEdit4(const char* label, const char* desc, float col[4], Im
         dl->AddRectFilled({cx2, swY},      {cx2+cw, swY+ch}, (ci%2==0)?chk1:chk2, 0);
         dl->AddRectFilled({cx2, swY+ch},   {cx2+cw, swY+swH}, (ci%2==0)?chk2:chk1, 0);
     }
-    // Color overlay
     dl->AddRectFilled({swX,swY},{swX+swW,swY+swH}, IM_COL32((int)(col[0]*255),(int)(col[1]*255),(int)(col[2]*255),(int)(col[3]*255)), swRnd);
     dl->AddRect({swX,swY},{swX+swW,swY+swH}, g_pido.elemStroke, swRnd, 0, 1.f);
 
@@ -3480,7 +3379,6 @@ static void DrawMenu(){
     static int page = g_activeTab;
 
     float menuScale = MenuScale();
-    // Ease-out-circ for open animation: snaps open fast, smooth close
     float animEased = sqrtf(1.f - powf(g_menuAnim - 1.f, 2.f));
     float animScale = LerpF(0.92f, 1.f, animEased);
     float menuW = 820.f * menuScale * animScale;
@@ -3527,16 +3425,12 @@ static void DrawMenu(){
     const float headerH       = 32.f * s;
     const float tabBarH       = 26.f * s;
 
-    // Main bg
     dl->AddRectFilled(pos, {pos.x+size.x, pos.y+size.y}, g_pido.bgFill, menuRounding);
-    // Accent outer border
     dl->AddRect(pos, {pos.x+size.x, pos.y+size.y},
         WithAlpha(g_pido.accent, 0.55f * animEased), menuRounding, 0, 1.f);
-    // Inner border
     dl->AddRect({pos.x+1.f, pos.y+1.f}, {pos.x+size.x-1.f, pos.y+size.y-1.f},
         IM_COL32(4, 5, 8, (int)(200.f*animEased)), menuRounding);
 
-    // Watermark-style gradient stripe at top (blue→purple→gold→teal, 3 segments)
     {
         const float gy0 = pos.y + 1.f, gy1 = pos.y + 3.f;
         float gx0 = pos.x + 2.f, gx1 = pos.x + size.x - 2.f;
@@ -3554,7 +3448,6 @@ static void DrawMenu(){
             fa(IM_COL32(116,168,148,220)), fa(IM_COL32(194,166,118,220)));
     }
 
-    // Header bottom separator + tab bar divider
     dl->AddLine({pos.x, pos.y+headerH}, {pos.x+size.x, pos.y+headerH},
         WithAlpha(g_pido.elemStroke, animEased), 1.f);
     float tabBarTop2 = pos.y + size.y - tabBarH;
@@ -3562,21 +3455,18 @@ static void DrawMenu(){
     dl->AddLine({pos.x, tabBarTop2}, {pos.x+size.x, tabBarTop2},
         WithAlpha(g_pido.elemStroke, animEased), 1.f);
 
-    // Header
     {
         ImFont* fBold = font::bold ? font::bold : ImGui::GetFont();
         ImFont* fReg  = font::regular ? font::regular : fBold;
         float midH = pos.y + headerH * 0.5f;
         ImU32 dimFaded = WithAlpha(g_pido.textDim, animEased);
 
-        // "litware" centered
         const char* title = "litware";
         const float tSize = 15.f * s;
         ImVec2 szT = fBold->CalcTextSizeA(tSize, FLT_MAX, 0.f, title);
         dl->AddText(fBold, tSize, {pos.x + (size.x - szT.x)*0.5f, midH - szT.y*0.5f},
             WithAlpha(g_pido.textActive, animEased), title);
 
-        // Left: version + date
         const char* verBuf  = "v0.1.2";
         const char* dateBuf = "release: 22.03.2026";
         ImVec2 szVer  = fReg->CalcTextSizeA(9.f*s, FLT_MAX, 0.f, verBuf);
@@ -3589,7 +3479,6 @@ static void DrawMenu(){
         lx += 6.f*s;
         dl->AddText(fReg, 9.f*s, {lx, midH - szDate.y*0.5f}, dimFaded, dateBuf);
 
-        // Right: fps  •  time
         SYSTEMTIME st{}; GetLocalTime(&st);
         char timeBuf[12], fpsBuf2[16];
         std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", st.wHour, st.wMinute);
@@ -3604,7 +3493,6 @@ static void DrawMenu(){
         rx -= szTime2.x + 8.f*s;
         dl->AddText(fReg, 9.f*s, {rx, midH - szTime2.y*0.5f}, dimFaded, timeBuf);
     }
-    // Bottom tab bar
     {
         const char* tabLabels2[] = {"Aimbot","Visuals","World","Misc"};
         ImFont* fTabReg = font::regular ? font::regular : ImGui::GetFont();
@@ -3632,7 +3520,6 @@ static void DrawMenu(){
         }
     }
 
-    // Instant tab switch — no fade animation on section change
     if(page != g_activeTab){
         g_grpGeneration++;
         g_activeTab = page;
@@ -3653,7 +3540,6 @@ static void DrawMenu(){
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, animEased * tabAlphaEased);
 
     if(g_activeTab==0){
-        // Left: Aimbot group (full height)
         ImGui::SetCursorPos({contentX, contentY});
         BeginPidoGroup("##g_aim", "Aimbot", {childW, contentH});
         PidoToggle("Enable","", &g_aimbotEnabled);
@@ -3667,11 +3553,9 @@ static void DrawMenu(){
             PidoToggle("Wait aim then fire","", &g_waitAimThenFire);
             if(g_waitAimThenFire) PidoSliderFloat("Aim lock (deg)","", &g_waitAimFovDeg, 0.5f, 8.f, "%.2f");
             PidoToggle("Crosshair target only","", &g_aimbotVisCheck);
-            // Ragebot toggle removed
         }
         EndPidoGroup();
 
-        // Right: Triggerbot / Recoil stacked
         float tbH  = grpH(3);
         float rcsH = contentH - tbH - gap;
         ImGui::SetCursorPos({rightX, contentY});
@@ -3688,7 +3572,6 @@ static void DrawMenu(){
         PidoSliderFloat("Y axis","", &g_rcsY, 0.f, 2.f, "%.2f");
         EndPidoGroup();
     }else if(g_activeTab==1){
-        // Left: ESP group with sub-sections (Box / Labels / Extra)
         ImGui::SetCursorPos({contentX, contentY});
         BeginPidoGroup("##g_esp", "ESP", {childW, contentH});
         PidoToggle("Enable##esp","", &g_espEnabled);
@@ -3748,7 +3631,6 @@ static void DrawMenu(){
         }
         EndPidoGroup();
 
-        // Right column: Effects + Sound stacked
         float effectsH = contentH * 0.58f - gap * 0.5f;
         float soundH   = contentH - effectsH - gap;
 
@@ -3801,11 +3683,9 @@ static void DrawMenu(){
         }
         EndPidoGroup();
     }else if(g_activeTab==3){
-        // Misc tab (skins tab removed)
         static int s_lastConfigTabFrame = -1;
         if(s_lastConfigTabFrame != ImGui::GetFrameCount()){ s_lastConfigTabFrame = ImGui::GetFrameCount(); RefreshConfigList(); }
 
-        // Left column: Movement + Radar + HUD stacked
         float movH   = grpH(2);
         float radH   = grpH(1);
         float hudH   = contentH - movH - radH - gap * 2.f;
@@ -3815,7 +3695,6 @@ static void DrawMenu(){
         BeginPidoGroup("##g_move", "Movement", {childW, movH});
         PidoToggle("Bunny hop","", &g_bhopEnabled);
         PidoToggle("Auto strafe","", &g_strafeEnabled);
-        // Edge jump + Auto peek removed
         EndPidoGroup();
 
         ImGui::SetCursorPos({contentX, contentY + movH + gap});
@@ -3831,7 +3710,6 @@ static void DrawMenu(){
         PidoToggle("Keybinds","", &g_keybindsEnabled);
         EndPidoGroup();
 
-        // Right column: View + Config stacked
         float viewH   = grpH(2);
         float configH = contentH - viewH - gap;
         if (configH < 40.f * s) configH = 40.f * s;
@@ -4004,7 +3882,7 @@ static void UpdateAndDrawParticles(float dt,float sw,float sh){
             p.worldPos.z += p.worldVel.z * dt;
             if(p.type==0){p.worldVel.z -= 8.f * dt;}
             if(p.type==1){p.worldVel.z -= 5.f * dt;}
-            if(p.type==2 || p.type==3){/* twinkle only */}
+            if(p.type==2 || p.type==3){}
             if(p.type==4){p.worldVel.z -= 12.f * dt;}
             if(p.type==5){
                 p.worldVel.z -= 540.f * dt;
@@ -4105,7 +3983,6 @@ static void DrawDamageFloaters(float sw, float sh){
         }
         float u = elapsed / it->duration;
 
-        // 3D rise: world Z goes up over lifetime
         float worldZOff = u * 55.f * g_damageFloaterScale;
         Vec3 worldPos{it->wx + it->randOffX, it->wy, it->wz + worldZOff};
 
@@ -4113,17 +3990,14 @@ static void DrawDamageFloaters(float sw, float sh){
         bool onScreen = vm && WorldToScreen(vm, worldPos, sw, sh, sx, sy);
         if(!onScreen){ ++it; continue; }
 
-        // Entry pop scale
         float entryT = Clampf(elapsed / 0.12f, 0.f, 1.f);
         float entryScale = 0.55f + 0.45f * (entryT * entryT * (3.f - 2.f * entryT));
-        // Fade out last 35%
         float fadeT = Clampf((u - 0.65f) / 0.35f, 0.f, 1.f);
         float alpha = 1.f - fadeT * fadeT;
 
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%d", it->damage);
 
-        // Size scales with damage: bigger for high damage
         float baseSize = Clampf(14.f + (float)it->damage * 0.08f, 14.f, 24.f) * g_damageFloaterScale;
         float fs = baseSize * entryScale;
         ImVec2 ts = fb->CalcTextSizeA(fs, FLT_MAX, 0.f, buf);
@@ -4131,13 +4005,11 @@ static void DrawDamageFloaters(float sw, float sh){
         float tx = sx - ts.x * 0.5f;
         float ty = sy - ts.y * 0.5f;
 
-        // Color: white for normal, bright yellow for 90+, red for 100+
         ImU32 textCol;
         if(it->damage >= 100)      textCol = IM_COL32(255,80,80,(int)(255*alpha));
         else if(it->damage >= 90)  textCol = IM_COL32(255,210,50,(int)(255*alpha));
         else                       textCol = IM_COL32(255,255,255,(int)(255*alpha));
 
-        // Thick shadow (Fortnite style)
         for(int sh2=2;sh2>=1;sh2--){
             float o=(float)sh2;
             dl->AddText(fb, fs, {tx+o,ty+o}, IM_COL32(0,0,0,(int)(190*alpha)), buf);
@@ -4255,7 +4127,6 @@ static void DrawCornerBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 co
     dl->AddLine({l,b},{l+lx,b},col,thick);dl->AddLine({l,b},{l,b-ly},col,thick);
     dl->AddLine({r,b},{r-lx,b},col,thick);dl->AddLine({r,b},{r,b-ly},col,thick);
 }
-// OOF: get arrow position at screen edge (angle computed by caller from ox,oy)
 static bool GetOofArrowPos(const float* vm, const Vec3& head, int sw, int sh, float& ox, float& oy){
     float w = vm[12]*head.x + vm[13]*head.y + vm[14]*head.z + vm[15];
     if(w > -0.001f && w < 0.001f) return false;
@@ -4278,7 +4149,6 @@ static bool GetOofArrowPos(const float* vm, const Vec3& head, int sw, int sh, fl
     return true;
 }
 
-// Coal box: corners 1/4 of box size (Andromeda/Weave style)
 static void DrawCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick){
     float lx=(r-l)*0.25f,ly=(b-t)*0.25f;
     dl->AddLine({l,t},{l+lx,t},col,thick);dl->AddLine({l,t},{l,t+ly},col,thick);
@@ -4286,13 +4156,11 @@ static void DrawCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,
     dl->AddLine({l,b},{l+lx,b},col,thick);dl->AddLine({l,b},{l,b-ly},col,thick);
     dl->AddLine({r,b},{r-lx,b},col,thick);dl->AddLine({r,b},{r,b-ly},col,thick);
 }
-// Outline box: triple outline (Weave/Pidoraise style)
 static void DrawOutlineBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick){
     dl->AddRect({l-1.f,t-1.f},{r+1.f,b+1.f},IM_COL32(0,0,0,(int)(235)),0.f,0,thick+1.f);
     dl->AddRect({l+1.f,t+1.f},{r-1.f,b-1.f},IM_COL32(0,0,0,(int)(130)),0.f,0,thick);
     dl->AddRect({l,t},{r,b},col,0.f,0,thick);
 }
-// Outline coal: coal box with black outline (Andromeda style)
 static void DrawOutlineCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick){
     ImU32 black=IM_COL32(0,0,0,255);
     DrawCoalBox(dl,l,t,r,b,black,thick+1.f);
@@ -4619,7 +4487,6 @@ else if(g_espHealthPos==1){
             float nameSize = g_espNameSize * s;
             ImVec2 ts=font->CalcTextSizeA(nameSize,FLT_MAX,0.f,e.name);
             float tx=cx-ts.x*0.5f,ty=bt2-ts.y-5.f*s;
-            // Plain text with 1px shadow
             dl->AddText(font,nameSize,{tx+1.f,ty+1.f},IM_COL32(0,0,0,(int)(180*alpha)),e.name);
             dl->AddText(font,nameSize,{tx,ty},IM_COL32(240,240,245,(int)(alpha*255)),e.name);
         }
@@ -4780,9 +4647,7 @@ else if(g_espHealthPos==1){
             dl->AddText(infoFont, infoSize, {tx,belowY},dimCol,dbuf);
             belowY += ts.y + 2.f * s;
         }
-        // spotted circle removed per user request
     };
-    // AutoPeek marker removed
 
     for(int i=0;i<g_esp_count;i++) drawOne(g_esp_players[i], 1.f);
     bool inCur[65]={false};
@@ -4924,14 +4789,12 @@ static void InitImGui(IDXGISwapChain*sc){
         return;
     }
     io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NoMouseCursorChange;
-    io.ConfigErrorRecoveryEnableAssert=false;  // avoid crash on SetCursorPos/SetCursorScreenPos boundary (Pido)
+    io.ConfigErrorRecoveryEnableAssert=false;  // чтобы не падало
     ImFontConfig fc{};fc.SizePixels=13.f;fc.FontDataOwnedByAtlas=false;
-    // Verdana Bold 13px — clean, readable, premium feel
     font::bold = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdanab.ttf", 13.f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
     if(!font::bold)
         font::bold = io.Fonts->AddFontFromMemoryTTF((void*)lexend_bold, (int)sizeof(lexend_bold), 13.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
     fc.SizePixels=12.f;
-    // Verdana Regular 12px
     font::regular = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\verdana.ttf", 12.f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
     if(!font::regular)
         font::regular = io.Fonts->AddFontFromMemoryTTF((void*)lexend_regular, (int)sizeof(lexend_regular), 12.f, &fc, io.Fonts->GetGlyphRangesCyrillic());
@@ -4972,15 +4835,14 @@ static bool g_firstFrame=false;
 
 static void CleanupRender(){
     if(g_cleanupDone.exchange(true))return;
-    ClipCursor(nullptr);  // Release cursor clip from menu (avoids hang if menu was open)
-    // Unbind RTV before releasing - game/ImGui may have it bound
+    ClipCursor(nullptr);
     if(g_context){g_context->OMSetRenderTargets(0,nullptr,nullptr);}
     if(g_gameHwnd&&g_origWndProc){
         SetWindowLongPtrA(g_gameHwnd,GWLP_WNDPROC,(LONG_PTR)g_origWndProc);
         g_origWndProc=nullptr;
     }
     if(g_imguiInitialized){
-        ImGui_ImplDX11_Shutdown();   // also releases device/context refs it holds
+        ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
         g_imguiInitialized=false;
@@ -4999,9 +4861,9 @@ static void DoDeferredUnload(){
     MH_Uninitialize();
     if(g_thisModule){
         HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID mod)->DWORD{
-            Sleep(800);  // Longer delay so game finishes any in-flight calls before unload
-            FreeLibraryAndExitThread((HMODULE)mod, 0);  // never returns
-            __assume(0);  // suppress C4702 unreachable code
+            Sleep(800);
+            FreeLibraryAndExitThread((HMODULE)mod, 0);
+            __assume(0);
         }, g_thisModule, 0, nullptr);
         if(hThread) CloseHandle(hThread);
     }
@@ -5044,11 +4906,10 @@ static void RenderFrame(IDXGISwapChain*sc){
         }if(!g_rtv)return;
     }
     if(GetAsyncKeyState(VK_INSERT)&1)g_menuOpen=!g_menuOpen;
-    // F1 keybinds popup disabled
     if(GetAsyncKeyState(VK_END)&1){RequestUnload();return;}
     if(!g_safeMode){
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
-        RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();/*RunSkinChanger();*/
+        RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();
         RunBHop();
         RunFOVChanger();
         RunAutostop();RunAimbot();RunRCS();RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
@@ -5068,13 +4929,13 @@ static void RenderFrame(IDXGISwapChain*sc){
     io.MouseDrawCursor = g_menuOpen;
     if(g_menuOpen&&g_gameHwnd){
         RECT r{}; GetWindowRect(g_gameHwnd,&r);
-        ClipCursor(&r);  // Block mouse input to game when menu open
+        ClipCursor(&r);
         POINT pt{};GetCursorPos(&pt);ScreenToClient(g_gameHwnd,&pt);
         io.MousePos={(float)pt.x,(float)pt.y};
         io.MouseDown[0]=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0;
         io.MouseDown[1]=(GetAsyncKeyState(VK_RBUTTON)&0x8000)!=0;SetCursor(LoadCursor(nullptr,IDC_ARROW));
     }else{
-        ClipCursor(nullptr);  // Release cursor when menu closed
+        ClipCursor(nullptr);
         io.MouseDown[0]=false;io.MouseDown[1]=false;
     }
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
@@ -5082,7 +4943,6 @@ static void RenderFrame(IDXGISwapChain*sc){
     DrawMenu();
     DrawDebugConsole();
     DrawKeybindsWindow();
-    // Night mode overlay removed — world color controlled via sky hook (HookDrawSkyboxArray)
     if(!g_safeMode){ DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
         DrawSoundPings(io.DeltaTime);
         DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); }
@@ -5099,10 +4959,10 @@ HRESULT __stdcall HookPresent(IDXGISwapChain*sc,UINT sync,UINT flags){
     static int s_crashCount = 0;
     __try {
         if(!g_pendingUnload) RenderFrame(sc);
-        s_crashCount = 0;  // reset on success
+        s_crashCount = 0;
     } __except(EXCEPTION_EXECUTE_HANDLER) {
         s_crashCount++;
-        g_safeMode = true;  // skip game reads next frames
+        g_safeMode = true;
         g_esp_count = 0; g_esp_oof_count = 0; g_espEnabled = false;
         if(g_imguiInitialized){
             __try { ImGui::EndFrame(); } __except(EXCEPTION_EXECUTE_HANDLER){}
@@ -5299,10 +5159,8 @@ static void EnsureSceneHooks(){
     if(!scene) return;
     static const char PAT_DRAW_SCENE[] = "\x48\x8B\xC4\x4C\x89\x40\x00\x48\x89\x50\x00\x55\x53\x41\x56";
     static const char MSK_DRAW_SCENE[] = "xxxxxx?xxx?xxxx";
-    // Fallback pattern from weave/pidoraise
     static const char PAT_DRAW_SCENE2[] = "\x48\x8B\xC4\x53\x41\x54\x41\x55\x48\x81\xEC";
     static const char MSK_DRAW_SCENE2[] = "xxxxxxxxxxx";
-    // Another fallback
     static const char PAT_DRAW_SCENE3[] = "\x48\x89\x54\x24\x00\x55\x57\x41\x55\x48\x8D\xAC\x24";
     static const char MSK_DRAW_SCENE3[] = "xxxx?xxxxxxxx";
     static const char PAT_SKY[] = "\x45\x85\xC9\x0F\x8E\x00\x00\x00\x00\x4C\x8B\xDC\x55";

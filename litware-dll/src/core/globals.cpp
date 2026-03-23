@@ -62,7 +62,7 @@ namespace globals {
     bool g_weaponChamsEnabled = false;
     float g_weaponChamsCol[4]{1.f,0.88f,0.35f,1.f};
     bool g_aimbotEnabled = false;
-    int g_aimbotKey = 1; // VK_LBUTTON
+    int g_aimbotKey = 1; // левая кнопка мыши
     float g_aimbotFov = 5.f;
     float g_aimbotSmooth = 6.f;
     bool g_fovCircleEnabled = false;
