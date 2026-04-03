@@ -11,7 +11,8 @@
 static std::vector<std::string> g_logs;
 static std::mutex g_logMutex;
 
-const std::vector<std::string>& GetDebugLogs() {
+std::vector<std::string> GetDebugLogs() {
+    std::lock_guard<std::mutex> lock(g_logMutex);
     return g_logs;
 }
 

@@ -1986,7 +1986,7 @@ static void DrawDebugConsole() {
         if (ImGui::Button("Clear")) ClearDebugLogs();
         ImGui::Separator();
         ImGui::BeginChild("LogScroll");
-        auto& logs = GetDebugLogs();
+        auto logs = GetDebugLogs();
         for (const auto& log : logs) {
             ImGui::TextUnformatted(log.c_str());
         }

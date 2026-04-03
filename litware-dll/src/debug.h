@@ -9,5 +9,5 @@ void BootstrapLog(const char* fmt, ...);
 void DebugLog(const char* fmt, ...);
 
 // логи для меню
-const std::vector<std::string>& GetDebugLogs();
+std::vector<std::string> GetDebugLogs();
 void ClearDebugLogs();
