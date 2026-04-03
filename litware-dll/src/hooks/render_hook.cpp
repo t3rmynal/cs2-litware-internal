@@ -77,6 +77,10 @@ static DXGI_FORMAT g_bbFormat = DXGI_FORMAT_UNKNOWN;
 static DWORD g_lastRtvFail = 0;
 static bool g_imguiInitialized = false;
 static bool g_menuOpen = false;
+static bool g_menuAnglesLocked = false;
+static float g_menuLockPitch = 0.f;
+static float g_menuLockYaw = 0.f;
+static float g_menuLockRoll = 0.f;
 static bool g_showDebugConsole = false;
 static std::atomic_bool g_unloading{false};
 static std::atomic_bool g_cleanupDone{false};
@@ -371,6 +375,28 @@ static inline ImU32 LerpColor(ImU32 a, ImU32 b, float t){
 static inline uintptr_t ViewAnglesAddr(){
     if(!g_client) return 0;
     return g_client + offsets::client::dwViewAngles;
+}
+
+static void UpdateMenuCameraLock(){
+    if(!g_menuOpen){
+        g_menuAnglesLocked = false;
+        return;
+    }
+    uintptr_t vaAddr = ViewAnglesAddr();
+    if(!vaAddr){
+        g_menuAnglesLocked = false;
+        return;
+    }
+    if(!g_menuAnglesLocked){
+        g_menuLockPitch = Rd<float>(vaAddr);
+        g_menuLockYaw = Rd<float>(vaAddr + 4);
+        g_menuLockRoll = Rd<float>(vaAddr + 8);
+        g_menuAnglesLocked = true;
+        return;
+    }
+    Wr<float>(vaAddr, g_menuLockPitch);
+    Wr<float>(vaAddr + 4, g_menuLockYaw);
+    Wr<float>(vaAddr + 8, g_menuLockRoll);
 }
 
 static void ReleaseMoveButtons(){
@@ -938,8 +964,12 @@ static void RenderFrame(IDXGISwapChain*sc){
             }
         }if(!g_rtv)return;
     }
-    if(GetAsyncKeyState(VK_INSERT)&1)g_menuOpen=!g_menuOpen;
+    if(GetAsyncKeyState(VK_INSERT)&1){
+        g_menuOpen=!g_menuOpen;
+        if(!g_menuOpen) g_menuAnglesLocked = false;
+    }
     if(GetAsyncKeyState(VK_END)&1){ReleaseRuntimeInputs();RequestUnload();return;}
+    UpdateMenuCameraLock();
     if(!g_safeMode){
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
         RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();
@@ -959,6 +989,7 @@ static void RenderFrame(IDXGISwapChain*sc){
             g_esp_screen_h = (int)g_bbHeight;
         }
     }
+    UpdateMenuCameraLock();
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGuiIO& io = ImGui::GetIO();
