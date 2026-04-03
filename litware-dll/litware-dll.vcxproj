@@ -79,6 +79,12 @@
     <ClCompile Include="external\minhook\src\hde\hde64.c" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="src\hooks\render_hook_config.cpp" />
+    <None Include="src\hooks\render_hook_game.cpp" />
+    <None Include="src\hooks\render_hook_menu.cpp" />
+    <None Include="src\hooks\render_hook_visuals.cpp" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="src\bypass.h" />
     <ClInclude Include="src\entry.h" />
     <ClInclude Include="src\debug.h" />
