@@ -1,4 +1,4 @@
-// Keeps config serialization/defaults together without growing render_hook.cpp even more.
+// конфиги вынесены отдельно
 
 static std::string ConfigDir(){
     char buf[MAX_PATH] = {};

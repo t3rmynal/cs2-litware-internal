@@ -1,4 +1,4 @@
-// Keeps the menu/input widgets grouped separately from the render/runtime logic.
+// меню и инпут вынесены отдельно
 
 static bool IsInputMessage(UINT msg){
     if(msg>=WM_MOUSEFIRST && msg<=WM_MOUSELAST) return true;
