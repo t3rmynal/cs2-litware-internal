@@ -487,7 +487,7 @@ static void ApplyDefaults(){
     g_rcsEnabled = false;
     g_rcsX = 1.0f;
     g_rcsY = 1.0f;
-    g_rcsSmooth = 6.0f;
+    g_rcsSmooth = 1.0f;
     g_tbEnabled = false;
     g_tbKey = 0;
     g_tbDelay = 50;
@@ -708,11 +708,11 @@ static bool SaveConfig(const char* name){
 static bool LoadConfig(const char* name){
     std::ifstream in(ConfigPath(name));
     if(!in.is_open()) return false;
+    ApplyDefaults();
     std::string line;
     bool ok = true;
     bool rcsXSet = false;
     bool rcsYSet = false;
-    g_skinOverrides.clear();
     while(std::getline(in, line)){
         if(line.empty()) continue;
         const auto pos = line.find('=');
@@ -739,6 +739,7 @@ static bool LoadConfig(const char* name){
     g_particlesWind = Clampf(g_particlesWind, 0.f, 60.f);
     g_particlesDepthFade = Clampf(g_particlesDepthFade, 0.0005f, 0.01f);
     g_waitAimFovDeg = Clampf(g_waitAimFovDeg, 0.4f, 15.f);
+    g_rcsSmooth = Clampf(g_rcsSmooth, 1.f, 30.f);
     g_damageFloaterDuration = Clampf(g_damageFloaterDuration, 0.25f, 2.5f);
     g_damageFloaterScale = Clampf(g_damageFloaterScale, 0.4f, 2.5f);
     g_damageFloaterAnchor &= 1;

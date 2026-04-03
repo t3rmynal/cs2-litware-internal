@@ -1055,6 +1055,7 @@ static void DrawMenu(){
         PidoToggle("Enable##rcs","", &g_rcsEnabled);
         PidoSliderFloat("X axis","", &g_rcsX, 0.f, 2.f, "%.2f");
         PidoSliderFloat("Y axis","", &g_rcsY, 0.f, 2.f, "%.2f");
+        PidoSliderFloat("Smooth","", &g_rcsSmooth, 1.f, 20.f, "%.1f");
         EndPidoGroup();
     }else if(g_activeTab==1){
         ImGui::SetCursorPos({contentX, contentY});
@@ -1093,6 +1094,7 @@ static void DrawMenu(){
             PidoToggle("Only visible","", &g_espOnlyVis);
             PidoToggle("Teammates","", &g_espShowTeam);
             PidoToggle("Head dot","", &g_espHeadDot);
+            PidoToggle("Spotted tag","", &g_espSpotted);
             PidoToggle("OOF arrows","", &g_espOof);
             if(g_espOof) PidoSliderFloat("OOF size","", &g_espOofSize, 12.f, 48.f, "%.0f");
             PidoToggle("Lines","", &g_espLines);
@@ -1192,6 +1194,7 @@ static void DrawMenu(){
         BeginPidoGroup("##g_hud", "HUD", {childW, hudH});
         PidoToggle("Bomb timer","", &g_bombTimerEnabled);
         PidoToggle("Watermark","", &g_watermarkEnabled);
+        if(g_watermarkEnabled) PidoToggle("Watermark fps","", &g_showFpsWatermark);
         PidoToggle("Spectator list","", &g_spectatorListEnabled);
         PidoToggle("Keybinds","", &g_keybindsEnabled);
         EndPidoGroup();

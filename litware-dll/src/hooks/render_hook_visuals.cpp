@@ -263,7 +263,8 @@ static void DrawWatermark(float sw){
     ImVec2 szTime  = fReg->CalcTextSizeA(11.f, FLT_MAX, 0.f, timeBuf);
     ImVec2 szPing  = fReg->CalcTextSizeA(11.f, FLT_MAX, 0.f, pingBuf);
 
-    float contentW = szLabel.x + 8.f + szFps.x + 8.f + szTime.x + 8.f + szPing.x + 20.f;
+    float contentW = szLabel.x + 8.f + szTime.x + 8.f + szPing.x + 20.f;
+    if(g_showFpsWatermark) contentW += szFps.x + 8.f;
     float barW = (std::max)(170.f, contentW + padX * 2.f);
     float barH = (std::max)({szLabel.y, szFps.y, szTime.y, szPing.y}) + padY * 2.f;
     float x = sw - barW - 12.f;
@@ -294,15 +295,21 @@ static void DrawWatermark(float sw){
 
     float cx = x + padX;
     float midY = y + barH*0.5f;
+    auto drawSep = [&](ImU32 col){
+        dl->AddCircleFilled({cx, midY}, dotR, col);
+        cx += 6.f;
+    };
     dl->AddText(fBold, 12.f, {cx, midY - szLabel.y*0.5f}, colAccent, label);
     cx += szLabel.x + 8.f;
-    dl->AddCircleFilled({cx, midY}, dotR, colDim); cx += 6.f;
-    dl->AddText(fReg, 11.f, {cx, midY - szFps.y*0.5f}, colText, fpsBuf);
-    cx += szFps.x + 8.f;
-    dl->AddCircleFilled({cx, midY}, dotR, colDim); cx += 6.f;
+    if(g_showFpsWatermark){
+        drawSep(colDim);
+        dl->AddText(fReg, 11.f, {cx, midY - szFps.y*0.5f}, colText, fpsBuf);
+        cx += szFps.x + 8.f;
+    }
+    drawSep(colDim);
     dl->AddText(fReg, 11.f, {cx, midY - szTime.y*0.5f}, colDim, timeBuf);
     cx += szTime.x + 8.f;
-    dl->AddCircleFilled({cx, midY}, dotR, colDim); cx += 6.f;
+    drawSep(colDim);
     dl->AddText(fReg, 11.f, {cx, midY - szPing.y*0.5f}, colDim, pingBuf);
 }
 
@@ -700,7 +707,7 @@ else if(g_espHealthPos==1){
             dl->AddText(font,nameSize,{tx+1.f,ty+1.f},IM_COL32(0,0,0,(int)(180*alpha)),e.name);
             dl->AddText(font,nameSize,{tx,ty},IM_COL32(240,240,245,(int)(alpha*255)),e.name);
         }
-        if(e.planting||e.flashed||e.scoped||e.defusing||e.hasBomb||e.hasKits){
+        if(e.planting||e.flashed||e.scoped||e.defusing||e.hasBomb||e.hasKits||(g_espSpotted&&e.spotted)){
             ImFont* sf = espFont;
             float tagX = br + 8.f * s;
             float tagY = bt2;
@@ -725,6 +732,7 @@ else if(g_espHealthPos==1){
             if(e.defusing){ drawTag("Defusing"); }
             if(e.hasBomb){ drawTag("Bomb"); }
             if(e.hasKits){ drawTag("Kits"); }
+            if(g_espSpotted && e.spotted){ drawTag("Spotted"); }
         }
         uintptr_t weapon = 0;
         WeaponInfo winfo = WeaponInfoForId(0);
@@ -957,4 +965,3 @@ static void DrawRadar(){
     dl->AddCircleFilled(center,4.f,IM_COL32(240,240,240,255),12);
     ImGui::End();
 }
-

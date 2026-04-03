@@ -440,7 +440,7 @@ static void DrawCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,
 static void DrawOutlineBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick);
 static void DrawOutlineCoalBox(ImDrawList*dl,float l,float t,float r,float b,ImU32 col,float thick);
 static void PushNotification(const char*text,ImU32 color);
-static void PushLog(const char* text, ImU32 color);
+static void PushLog(const char* text, ImU32 color, int type);
 static void PlayHitSound(int type);
 static void EnsureSceneHooks();
 static void EnsureClientHooks();

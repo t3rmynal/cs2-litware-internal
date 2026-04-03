@@ -334,8 +334,7 @@ static void ProcessHitEvents(){
             char buf[256];
             std::snprintf(buf,sizeof(buf),"Hit %s for %d", e.name[0]?e.name:"Enemy", dmg);
             if(g_hitNotifEnabled) PushNotification(buf, IM_COL32(240,180,60,255));
-            LogEntry le{}; std::snprintf(le.text,sizeof(le.text),"%s",buf); le.color=IM_COL32(240,180,60,255); le.maxlife=4.f; le.lifetime=4.f; le.type=0;
-            g_logs.push_back(le); if(g_logs.size()>8)g_logs.pop_front();
+            else PushLog(buf, IM_COL32(240,180,60,255), 0);
             PlayHitSound(g_hitSoundType);
             if(g_damageFloatersEnabled){
                 DamageFloater df{};
@@ -357,8 +356,7 @@ static void ProcessHitEvents(){
             char buf[256];
             std::snprintf(buf,sizeof(buf),"Killed %s", e.name[0]?e.name:"Enemy");
             if(g_killNotifEnabled) PushNotification(buf, IM_COL32(140,100,255,255));
-            LogEntry le{}; std::snprintf(le.text,sizeof(le.text),"%s",buf); le.color=IM_COL32(140,100,255,255); le.maxlife=4.f; le.lifetime=4.f; le.type=1;
-            g_logs.push_back(le); if(g_logs.size()>8)g_logs.pop_front();
+            else PushLog(buf, IM_COL32(140,100,255,255), 1);
             if(g_killEffectEnabled){
                 g_lastKillEffectTime = GetTickCount64();
                 g_lastKillEffectPos = {e.head_ox, e.head_oy, e.head_oz};
@@ -647,9 +645,10 @@ static void RunRCS(){
     if(dx==0.f&&dy==0.f)return;
 
     uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
+    float smooth = Clampf(g_rcsSmooth, 1.f, 30.f);
     float pitch=Rd<float>(vaAddr);float yaw=Rd<float>(vaAddr+4);
-    pitch-=dx*2.f;
-    yaw -=dy*2.f;
+    pitch-=(dx*2.f)/smooth;
+    yaw -=(dy*2.f)/smooth;
     pitch=Clampf(pitch,-89.f,89.f);
     if(yaw>180.f)yaw-=360.f;else if(yaw<-180.f)yaw+=360.f;
     Wr<float>(vaAddr,pitch);
@@ -867,8 +866,8 @@ static float g_bombDefuseEnd=0.f;
 static UINT64 g_lastBombScanMs=0;
 
 static void PushNotification(const char*text,ImU32 color){
-    (void)color;
     if(!text||!text[0])return;
+    PushLog(text, color, 0);
 }
 
 static void PlayHitSound(int type){
@@ -881,11 +880,12 @@ static void PlayHitSound(int type){
     }
 }
 
-static void PushLog(const char* text, ImU32 color){
+static void PushLog(const char* text, ImU32 color, int type){
     if(!text||!text[0]) return;
     LogEntry e{};
     std::snprintf(e.text,sizeof(e.text),"%s",text);
     e.color=color;
+    e.type=type;
     e.maxlife=4.0f; e.lifetime=4.0f;
     g_logs.push_back(e);
     if(g_logs.size()>8) g_logs.pop_front();
