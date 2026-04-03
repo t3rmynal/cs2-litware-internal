@@ -50,9 +50,9 @@ set_target_properties(litware-dll PROPERTIES
 foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
     string(TOUPPER "${cfg}" cfg_upper)
     set_target_properties(litware-dll PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_CURRENT_SOURCE_DIR}/bin/${cfg}"
-        LIBRARY_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_CURRENT_SOURCE_DIR}/bin/${cfg}"
-        ARCHIVE_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_CURRENT_SOURCE_DIR}/obj/${cfg}"
+        RUNTIME_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_CURRENT_SOURCE_DIR}/bin/cmake/${cfg}"
+        LIBRARY_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_CURRENT_SOURCE_DIR}/bin/cmake/${cfg}"
+        ARCHIVE_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_CURRENT_SOURCE_DIR}/obj/cmake/${cfg}"
     )
 endforeach()
 
@@ -67,6 +67,9 @@ target_link_libraries(litware-dll
 )
 
 if(MSVC)
+    set_property(TARGET litware-dll PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
     target_compile_options(litware-dll PRIVATE
         /W4
         /EHsc
@@ -106,4 +109,23 @@ else()
         -Wno-missing-field-initializers
         $<$<CONFIG:Release>:-O3>
     )
+
+    if(DEFINED LLVM_MINGW_ROOT AND NOT LLVM_MINGW_ROOT STREQUAL "")
+        set(_litware_mingw_runtime_dir "${LLVM_MINGW_ROOT}/x86_64-w64-mingw32/bin")
+        set(_litware_runtime_dlls
+            "${_litware_mingw_runtime_dir}/libc++.dll"
+            "${_litware_mingw_runtime_dir}/libunwind.dll"
+        )
+
+        foreach(_litware_runtime_dll IN LISTS _litware_runtime_dlls)
+            if(EXISTS "${_litware_runtime_dll}")
+                add_custom_command(TARGET litware-dll POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "${_litware_runtime_dll}"
+                        "$<TARGET_FILE_DIR:litware-dll>"
+                    VERBATIM
+                )
+            endif()
+        endforeach()
+    endif()
 endif()
