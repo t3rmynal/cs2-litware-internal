@@ -1,41 +1,41 @@
 #pragma once
 #include <cstdint>
 
-// обновлено по cs2-dumper: 2026-04-03 16:24:51 UTC
+// обновлено по cs2-dumper: 2026-04-03 22:06:54 UTC
 namespace offsets {
 
     namespace client {
-        constexpr uintptr_t dwCSGOInput                         = 0x231E330;
-        constexpr uintptr_t dwEntityList                        = 0x24B3268;
-        constexpr uintptr_t dwGameEntitySystem                  = 0x24B3268;
+        constexpr uintptr_t dwCSGOInput                           = 0x231E330;
+        constexpr uintptr_t dwEntityList                          = 0x24B3268;
+        constexpr uintptr_t dwGameEntitySystem                    = 0x24B3268;
         constexpr uintptr_t dwGameEntitySystem_highestEntityIndex = 0x20A0;
-        constexpr uintptr_t dwGameRules                         = 0x2311ED0;
-        constexpr uintptr_t dwGlobalVars                        = 0x2062540;
-        constexpr uintptr_t dwGlowManager                       = 0x230ECD8;
-        constexpr uintptr_t dwLocalPlayerController             = 0x22F8028;
-        constexpr uintptr_t dwLocalPlayerPawn                   = 0x206D9E0;
-        constexpr uintptr_t dwPlantedC4                         = 0x231BAB0;
-        constexpr uintptr_t dwPrediction                        = 0x206D8F0;
-        constexpr uintptr_t dwSensitivity                       = 0x230F7E8;
-        constexpr uintptr_t dwSensitivity_sensitivity           = 0x58;
-        constexpr uintptr_t dwViewAngles                        = 0x231E9B8;
-        constexpr uintptr_t dwViewMatrix                        = 0x2313F10;
-        constexpr uintptr_t dwViewRender                        = 0x2314328;
-        constexpr uintptr_t dwWeaponC4                          = 0x229D2B0;
+        constexpr uintptr_t dwGameRules                           = 0x2311ED0;
+        constexpr uintptr_t dwGlobalVars                          = 0x2062540;
+        constexpr uintptr_t dwGlowManager                         = 0x230ECD8;
+        constexpr uintptr_t dwLocalPlayerController               = 0x22F8028;
+        constexpr uintptr_t dwLocalPlayerPawn                     = 0x206D9E0;
+        constexpr uintptr_t dwPlantedC4                           = 0x231BAB0;
+        constexpr uintptr_t dwPrediction                          = 0x206D8F0;
+        constexpr uintptr_t dwSensitivity                         = 0x230F7E8;
+        constexpr uintptr_t dwSensitivity_sensitivity             = 0x58;
+        constexpr uintptr_t dwViewAngles                          = 0x231E9B8;
+        constexpr uintptr_t dwViewMatrix                          = 0x2313F10;
+        constexpr uintptr_t dwViewRender                          = 0x2314328;
+        constexpr uintptr_t dwWeaponC4                            = 0x229D2B0;
     }
 
     namespace engine2 {
-        constexpr uintptr_t dwBuildNumber                          = 0x60E514;
-        constexpr uintptr_t dwNetworkGameClient                    = 0x9095D0;
-        constexpr uintptr_t dwNetworkGameClient_clientTickCount    = 0x378;
-        constexpr uintptr_t dwNetworkGameClient_deltaTick          = 0x24C;
-        constexpr uintptr_t dwNetworkGameClient_isBackgroundMap    = 0x2C141F;
-        constexpr uintptr_t dwNetworkGameClient_localPlayer        = 0xF8;
-        constexpr uintptr_t dwNetworkGameClient_maxClients         = 0x240;
-        constexpr uintptr_t dwNetworkGameClient_serverTickCount    = 0x24C;
-        constexpr uintptr_t dwNetworkGameClient_signOnState        = 0x230;
-        constexpr uintptr_t dwWindowWidth                          = 0x90D998;
-        constexpr uintptr_t dwWindowHeight                         = 0x90D99C;
+        constexpr uintptr_t dwBuildNumber                       = 0x60E514;
+        constexpr uintptr_t dwNetworkGameClient                 = 0x9095D0;
+        constexpr uintptr_t dwNetworkGameClient_clientTickCount = 0x378;
+        constexpr uintptr_t dwNetworkGameClient_deltaTick       = 0x24C;
+        constexpr uintptr_t dwNetworkGameClient_isBackgroundMap = 0x2C141F;
+        constexpr uintptr_t dwNetworkGameClient_localPlayer     = 0xF8;
+        constexpr uintptr_t dwNetworkGameClient_maxClients      = 0x240;
+        constexpr uintptr_t dwNetworkGameClient_serverTickCount = 0x24C;
+        constexpr uintptr_t dwNetworkGameClient_signOnState     = 0x230;
+        constexpr uintptr_t dwWindowWidth                       = 0x90D998;
+        constexpr uintptr_t dwWindowHeight                      = 0x90D99C;
     }
 
     namespace inputsystem {
@@ -71,14 +71,14 @@ namespace offsets {
     }
 
     namespace client_interfaces {
-        constexpr uintptr_t ClientToolsInfo_001           = 0x2065F90;
-        constexpr uintptr_t EmptyWorldService001_Client   = 0x201FE50;
-        constexpr uintptr_t GameClientExports001          = 0x2062C70;
-        constexpr uintptr_t LegacyGameUI001               = 0x20804D0;
-        constexpr uintptr_t Source2Client002              = 0x230CDD0;
-        constexpr uintptr_t Source2ClientConfig001        = 0x2290F00;
-        constexpr uintptr_t Source2ClientPrediction001    = 0x206D8F0;
-        constexpr uintptr_t Source2ClientUI001            = 0x207ED60;
+        constexpr uintptr_t ClientToolsInfo_001         = 0x2065F90;
+        constexpr uintptr_t EmptyWorldService001_Client = 0x201FE50;
+        constexpr uintptr_t GameClientExports001        = 0x2062C70;
+        constexpr uintptr_t LegacyGameUI001             = 0x20804D0;
+        constexpr uintptr_t Source2Client002            = 0x230CDD0;
+        constexpr uintptr_t Source2ClientConfig001      = 0x2290F00;
+        constexpr uintptr_t Source2ClientPrediction001  = 0x206D8F0;
+        constexpr uintptr_t Source2ClientUI001          = 0x207ED60;
     }
 
     namespace base_entity {
