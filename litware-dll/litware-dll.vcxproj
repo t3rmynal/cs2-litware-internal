@@ -88,6 +88,8 @@
     <ClInclude Include="src\core\entity.h" />
     <ClInclude Include="src\core\world_to_screen.h" />
     <ClInclude Include="src\core\esp_data.h" />
+    <ClInclude Include="src\platform\minhook_utils.h" />
+    <ClInclude Include="src\platform\winapi.h" />
     <ClInclude Include="src\Fonts.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

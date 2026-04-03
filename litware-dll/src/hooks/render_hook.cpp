@@ -1,5 +1,7 @@
 #include "render_hook.h"
 #include "Fonts.h"
+#include "../platform/minhook_utils.h"
+#include "../platform/winapi.h"
 #include "res/font.h"
 #include "res/jetbrains_mono.h"
 #include "res/cs2_gun_icons.h"
@@ -14,8 +16,6 @@
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
-#include <Windows.h>
-#include <Psapi.h>
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
@@ -33,13 +33,6 @@
 #include <algorithm>
 #include <chrono>
 #include <random>
-
-#ifdef _MSC_VER
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "Psapi.lib")
-#pragma comment(lib, "winmm.lib")
-#endif
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 extern HMODULE g_thisModule;
@@ -3164,8 +3157,8 @@ static void EnsureSceneHooks(){
     }
     void* drawSky = (!g_drawSkyHooked && needSky) ? PatternScan(scene, PAT_SKY, MSK_SKY) : nullptr;
     if(!g_drawSceneHooked){
-        if(drawScene && MH_CreateHook(drawScene, reinterpret_cast<LPVOID>(&HookDrawSceneObject), reinterpret_cast<LPVOID*>(&g_origDrawSceneObject))==MH_OK){
-            MH_EnableHook(drawScene);
+        if(drawScene && minhook_utils::CreateHook(drawScene, &HookDrawSceneObject, &g_origDrawSceneObject)==MH_OK){
+            minhook_utils::EnableHook(drawScene);
             g_drawSceneHooked = true;
             DebugLog("[LitWare] draw_scene_object hook ok");
         } else {
@@ -3177,8 +3170,8 @@ static void EnsureSceneHooks(){
         }
     }
     if(needSky && !g_drawSkyHooked){
-        if(drawSky && MH_CreateHook(drawSky, reinterpret_cast<LPVOID>(&HookDrawSkyboxArray), reinterpret_cast<LPVOID*>(&g_origDrawSkyboxArray))==MH_OK){
-            MH_EnableHook(drawSky);
+        if(drawSky && minhook_utils::CreateHook(drawSky, &HookDrawSkyboxArray, &g_origDrawSkyboxArray)==MH_OK){
+            minhook_utils::EnableHook(drawSky);
             g_drawSkyHooked = true;
             DebugLog("[LitWare] draw_skybox_array hook ok");
         } else {
@@ -3204,8 +3197,8 @@ static void EnsureClientHooks(){
     if(!g_worldFovHooked){
         void* callSite = PatternScan(client, PAT_FOV, MSK_FOV);
         void* fn = ResolveRelative(callSite, 1, 5);
-        if(fn && MH_CreateHook(fn, reinterpret_cast<LPVOID>(&HookGetWorldFov), reinterpret_cast<LPVOID*>(&g_origGetWorldFov))==MH_OK){
-            MH_EnableHook(fn);
+        if(fn && minhook_utils::CreateHook(fn, &HookGetWorldFov, &g_origGetWorldFov)==MH_OK){
+            minhook_utils::EnableHook(fn);
             g_worldFovHooked = true;
             DebugLog("[LitWare] get_world_fov hook ok");
         } else {
@@ -3218,8 +3211,8 @@ static void EnsureClientHooks(){
     }
     if(!g_fpLegsHooked){
         void* fn = PatternScan(client, PAT_FP_LEGS, MSK_FP_LEGS);
-        if(fn && MH_CreateHook(fn, reinterpret_cast<LPVOID>(&HookFirstPersonLegs), reinterpret_cast<LPVOID*>(&g_origFirstPersonLegs))==MH_OK){
-            MH_EnableHook(fn);
+        if(fn && minhook_utils::CreateHook(fn, &HookFirstPersonLegs, &g_origFirstPersonLegs)==MH_OK){
+            minhook_utils::EnableHook(fn);
             g_fpLegsHooked = true;
             DebugLog("[LitWare] fp_legs hook ok");
         } else {
@@ -3252,10 +3245,10 @@ bool Initialize(){
         DebugLog("[LitWare] MH_Initialize failed: %d", (int)mh);
         return false;
     }
-    if(MH_CreateHook(presentAddr, reinterpret_cast<LPVOID>(&HookPresent), reinterpret_cast<LPVOID*>(&g_originalPresent))!=MH_OK){
+    if(minhook_utils::CreateHook(presentAddr, &HookPresent, &g_originalPresent)!=MH_OK){
         DebugLog("[LitWare] MH_CreateHook failed");MH_Uninitialize();return false;
     }
-    if(MH_EnableHook(presentAddr)!=MH_OK){
+    if(minhook_utils::EnableHook(presentAddr)!=MH_OK){
         DebugLog("[LitWare] MH_EnableHook failed");MH_Uninitialize();return false;
     }
     DebugLog("[LitWare] Present hook installed");return true;

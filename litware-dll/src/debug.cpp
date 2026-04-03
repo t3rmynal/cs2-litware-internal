@@ -1,5 +1,5 @@
 #include "debug.h"
-#include <Windows.h>
+#include "platform/winapi.h"
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>

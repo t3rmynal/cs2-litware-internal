@@ -2,7 +2,7 @@
 #include "offsets.h"
 #include <cstdint>
 #ifdef _WIN32
-#include <Windows.h>
+#include "platform/winapi.h"
 #endif
 
 // вспомогательные адреса

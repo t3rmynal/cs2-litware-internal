@@ -1,13 +1,9 @@
 #include "bypass.h"
 #include "debug.h"
-#include <Windows.h>
+#include "platform/minhook_utils.h"
+#include "platform/winapi.h"
 #include <MinHook.h>
 #include <cstdint>
-#include <Psapi.h>
-
-#ifdef _MSC_VER
-#pragma comment(lib, "Psapi.lib")
-#endif
 
 namespace {
 
@@ -65,14 +61,17 @@ bool Initialize() {
         // мог уже подняться раньше
     }
 
-    MH_STATUS st = MH_CreateHook(pBSecureAllowed, reinterpret_cast<LPVOID>(&HookBSecureAllowed),
-        reinterpret_cast<LPVOID*>(&g_origBSecureAllowed));
+    MH_STATUS st = minhook_utils::CreateHook(
+        pBSecureAllowed,
+        &HookBSecureAllowed,
+        &g_origBSecureAllowed
+    );
     if (st != MH_OK) {
         DebugLog("[bypass] MH_CreateHook BSecureAllowed failed: %d", static_cast<int>(st));
         return false;
     }
 
-    if (MH_EnableHook(pBSecureAllowed) != MH_OK) {
+    if (minhook_utils::EnableHook(pBSecureAllowed) != MH_OK) {
         DebugLog("[bypass] MH_EnableHook BSecureAllowed failed");
         return false;
     }

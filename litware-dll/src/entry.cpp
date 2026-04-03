@@ -2,7 +2,7 @@
 #include "bypass.h"
 #include "hooks/render_hook.h"
 #include "debug.h"
-#include <Windows.h>
+#include "platform/winapi.h"
 
 void entry() {
     BootstrapLog("[litware] entry() start");

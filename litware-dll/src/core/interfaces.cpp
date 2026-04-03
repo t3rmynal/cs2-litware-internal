@@ -1,6 +1,5 @@
 #include "interfaces.h"
 #include "offsets.h"
-#include <Psapi.h>
 
 namespace interfaces {
     uintptr_t client = 0;

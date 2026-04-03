@@ -1,4 +1,4 @@
-#include <Windows.h>
+#include "platform/winapi.h"
 #include "debug.h"
 
 HMODULE g_thisModule = nullptr;

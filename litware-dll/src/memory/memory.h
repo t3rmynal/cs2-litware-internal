@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <Windows.h>
+#include "platform/winapi.h"
 
 // прямой доступ к памяти
 
