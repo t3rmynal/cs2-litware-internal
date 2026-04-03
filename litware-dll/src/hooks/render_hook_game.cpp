@@ -864,7 +864,7 @@ static int g_bombSite=-1;
 static Vec3 g_bombPos{};
 static float g_bombExplodeTime=0.f;
 static float g_bombDefuseEnd=0.f;
-static float g_lastBombScan=0.f;
+static UINT64 g_lastBombScanMs=0;
 
 static void PushNotification(const char*text,ImU32 color){
     (void)color;
@@ -1054,37 +1054,66 @@ static void DrawLogs(float dt,float sw,float sh){
     g_logs.erase(std::remove_if(g_logs.begin(),g_logs.end(),[](const LogEntry& l){return l.lifetime<=0.f;}),g_logs.end());
 }
 
-static const float g_bombTimerMaxDist = 1500.f;
+static void ClearBombInfo(){
+    g_bombActive = false;
+    g_bombSite = -1;
+    g_bombExplodeTime = 0.f;
+    g_bombDefusing = false;
+    g_bombDefuseEnd = 0.f;
+    g_bombDefuserPawn = 0;
+    g_bombPos = {};
+}
+
+static uintptr_t FindBombEntity(){
+    uintptr_t planted = Rd<uintptr_t>(g_client + offsets::client::dwPlantedC4);
+    if(IsLikelyPtr(planted)) return planted;
+
+    uintptr_t entityList = Rd<uintptr_t>(g_client + offsets::client::dwEntityList);
+    if(!entityList) return 0;
+
+    for(int i = 1; i < 1024; i++){
+        uintptr_t chunk = Rd<uintptr_t>(entityList + 8*((i&0x7FFF)>>9) + 16);
+        if(!chunk) continue;
+        uintptr_t ent = Rd<uintptr_t>(chunk + 112*(i&0x1FF));
+        if(!IsLikelyPtr(ent)) continue;
+        if(Rd<bool>(ent + offsets::planted_c4::m_bBombTicking)) return ent;
+    }
+    return 0;
+}
 
 static void UpdateBombInfo(){
-    if(!g_bombTimerEnabled||!g_client) return;
-    float now = GetCurTime();
-    if(now - g_lastBombScan < 0.2f) return;
-    g_lastBombScan = now;
-    g_bombActive=false;g_bombSite=-1;g_bombExplodeTime=0.f;g_bombDefusing=false;g_bombDefuseEnd=0.f;g_bombDefuserPawn=0;g_bombPos={};
-    uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
-    for(int i=1;i<1024;i++){
-        uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
-        uintptr_t ent=Rd<uintptr_t>(chunk+112*(i&0x1FF));if(!ent)continue;
-        bool ticking=Rd<bool>(ent+offsets::planted_c4::m_bBombTicking);
-        if(!ticking) continue;
-        float blow=Rd<float>(ent+offsets::planted_c4::m_flC4Blow);
-        if(blow<=0.f) continue;
-        uintptr_t scn = Rd<uintptr_t>(ent+offsets::base_entity::m_pGameSceneNode);
-        if(scn) g_bombPos = Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
-        float dx = g_bombPos.x - g_localOrigin.x, dy = g_bombPos.y - g_localOrigin.y;
-        if(dx*dx + dy*dy > g_bombTimerMaxDist*g_bombTimerMaxDist) continue;
-        g_bombActive=true;
-        g_bombSite=Rd<int>(ent+offsets::planted_c4::m_nBombSite);
-        g_bombExplodeTime=blow;
-        g_bombDefusing=Rd<bool>(ent+offsets::planted_c4::m_bBeingDefused);
-        if(g_bombDefusing){
-            g_bombDefuseEnd=Rd<float>(ent+offsets::planted_c4::m_flDefuseCountDown);
-            uint32_t hDefuser=Rd<uint32_t>(ent+offsets::planted_c4::m_hBombDefuser);
-            g_bombDefuserPawn=hDefuser?ResolveHandle(entityList,hDefuser):0;
-        }
-        break;
+    if(!g_bombTimerEnabled||!g_client){
+        ClearBombInfo();
+        return;
     }
+
+    UINT64 nowMs = GetTickCount64();
+    if(nowMs - g_lastBombScanMs < 100) return;
+    g_lastBombScanMs = nowMs;
+
+    ClearBombInfo();
+
+    uintptr_t ent = FindBombEntity();
+    if(!IsLikelyPtr(ent)) return;
+
+    float blow = Rd<float>(ent + offsets::planted_c4::m_flC4Blow);
+    if(blow <= 0.f) return;
+
+    uintptr_t scn = Rd<uintptr_t>(ent + offsets::base_entity::m_pGameSceneNode);
+    if(scn) g_bombPos = Rd<Vec3>(scn + offsets::scene_node::m_vecAbsOrigin);
+
+    g_bombActive = Rd<bool>(ent + offsets::planted_c4::m_bBombTicking);
+    if(!g_bombActive) return;
+
+    g_bombSite = Rd<int>(ent + offsets::planted_c4::m_nBombSite);
+    g_bombExplodeTime = blow;
+    g_bombDefusing = Rd<bool>(ent + offsets::planted_c4::m_bBeingDefused);
+    if(!g_bombDefusing) return;
+
+    g_bombDefuseEnd = Rd<float>(ent + offsets::planted_c4::m_flDefuseCountDown);
+    uintptr_t entityList = Rd<uintptr_t>(g_client + offsets::client::dwEntityList);
+    uint32_t hDefuser = Rd<uint32_t>(ent + offsets::planted_c4::m_hBombDefuser);
+    g_bombDefuserPawn = (entityList && hDefuser) ? ResolveHandle(entityList, hDefuser) : 0;
 }
 
 static void DrawBombTimer(float sw){
@@ -1101,7 +1130,7 @@ static void DrawBombTimer(float sw){
     }else{
         std::snprintf(tail,sizeof(tail)," | %.1fs", tLeft);
     }
-    char siteStr[2] = { (char)(g_bombSite==1?'B':'A'), '\0' };
+    char siteStr[2] = { (char)(g_bombSite==1?'B':(g_bombSite==0?'A':'?')), '\0' };
     ImDrawList*dl=ImGui::GetForegroundDrawList();if(!dl)return;
     ImFont* reg = font::regular ? font::regular : ImGui::GetFont();
     const float fs = reg->LegacySize;
