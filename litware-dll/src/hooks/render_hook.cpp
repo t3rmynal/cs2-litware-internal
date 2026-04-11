@@ -957,6 +957,10 @@ static void InitImGui(IDXGISwapChain*sc){
         if(g_device){g_device->Release();g_device=nullptr;}
         return;
     }
+    ImGuiIO& initIo = ImGui::GetIO();
+    initIo.ConfigErrorRecoveryEnableAssert = false;
+    initIo.ConfigErrorRecoveryEnableTooltip = false;
+    initIo.ConfigErrorRecoveryEnableDebugLog = false;
     g_imguiInitialized=true;DebugLog("[LitWare] ImGui OK");
 }
 
