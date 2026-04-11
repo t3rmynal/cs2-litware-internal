@@ -729,9 +729,6 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "kill_notif", g_killNotifEnabled);
     WriteBool(out, "hit_sound", g_hitSoundEnabled);
     WriteInt(out, "hit_sound_type", g_hitSoundType);
-    WriteBool(out, "hitmarker", g_hitmarkerEnabled);
-    WriteFloat(out, "hitmarker_duration", g_hitmarkerDuration);
-    WriteInt(out, "hitmarker_style", g_hitmarkerStyle);
     WriteInt(out, "hit_effect_type", g_hitEffectType);
     WriteInt(out, "kill_effect_type", g_killEffectType);
     WriteFloat(out, "kill_effect_duration", g_killEffectDuration);
