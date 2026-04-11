@@ -609,9 +609,6 @@ static void RunBHop(){
 
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp)return;
     bool onGround = (Rd<uint32_t>(lp+offsets::base_entity::m_fFlags) & 1) != 0;
-    Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
-    float speed=sqrtf(vel.x*vel.x+vel.y*vel.y);
-    if(onGround && speed<50.f){ Wr<int>(g_client+offsets::buttons::jump, 0); return; }
 
     static bool s_lastJumped=false;
     if(onGround){
@@ -620,6 +617,24 @@ static void RunBHop(){
     }else{
         Wr<int>(g_client+offsets::buttons::jump, 0);
         s_lastJumped=false;
+        // авто стрейф в воздухе для набора скорости
+        uintptr_t vaAddr=ViewAnglesAddr();
+        if(vaAddr){
+            static float s_bhopLastYaw=0.f;
+            float curYaw=Rd<float>(vaAddr+4);
+            float delta=curYaw-s_bhopLastYaw;
+            if(delta>180.f)delta-=360.f; else if(delta<-180.f)delta+=360.f;
+            s_bhopLastYaw=curYaw;
+            if(fabsf(delta)>0.5f){
+                if(delta>0.f){
+                    Wr<int>(g_client+offsets::buttons::right, 65537);
+                    Wr<int>(g_client+offsets::buttons::left,  0);
+                }else{
+                    Wr<int>(g_client+offsets::buttons::left,  65537);
+                    Wr<int>(g_client+offsets::buttons::right, 0);
+                }
+            }
+        }
     }
 }
 
@@ -765,7 +780,8 @@ static void RunAimbot(){
     g_aimbotLastBestFov = 1e9f;
     if(!g_aimbotEnabled||!g_client)return;
     if(g_menuOpen) return;
-    if(!(GetAsyncKeyState(g_aimbotKey)&0x8000))return;
+    // rage mode (auto-fire) работает без кейбинда
+    if(!g_autoFireEnabled && !(GetAsyncKeyState(g_aimbotKey)&0x8000))return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     if(g_aimbotWeaponFilter!=0){
         uintptr_t el=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
@@ -833,7 +849,7 @@ static void RunAimbot(){
     g_aimbotLastHitchance = hc;
     if(g_hitchance > 0.f && hc < g_hitchance) return;
     Vec2 targetAngle=CalcAngle(eyePos,bestPoint);
-    float smooth=Clampf(g_aimbotSmooth,1.f,50.f);
+    float smooth=g_autoFireEnabled ? 1.f : Clampf(g_aimbotSmooth,1.f,50.f);
     float dp=AngleDiff(targetAngle.x,curPitch);
     float dy=AngleDiff(targetAngle.y,curYaw);
     float newPitch=curPitch+(dp/smooth);
@@ -884,7 +900,7 @@ static void RunDoubleTap(){
 }
 
 static void RunAimFireGate(){
-    if(!g_waitAimThenFire || !g_aimbotEnabled || !g_client || g_menuOpen) return;
+    if(!g_waitAimThenFire || !g_aimbotEnabled || !g_client || g_menuOpen || g_autoFireEnabled) return;
     if(!(GetAsyncKeyState(g_aimbotKey) & 0x8000)) return;
     if(!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return;
     uintptr_t lp = Rd<uintptr_t>(g_client + offsets::client::dwLocalPlayerPawn);
