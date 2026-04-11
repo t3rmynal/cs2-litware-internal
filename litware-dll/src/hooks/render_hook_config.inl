@@ -337,6 +337,15 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="wait_aim_fire"){ g_waitAimThenFire=ParseBool(val); return true; }
     if(key=="wait_aim_deg"){ float v; if(ParseFloat(val,v)) g_waitAimFovDeg=v; else ok=false; return true; }
     if(key=="autostop"){ g_autostopEnabled=ParseBool(val); return true; }
+    if(key=="anti_aim"){ g_antiAimEnabled=ParseBool(val); return true; }
+    if(key=="anti_aim_type"){ int v; if(ParseInt(val,v)) g_antiAimType=v; else ok=false; return true; }
+    if(key=="anti_aim_speed"){ float v; if(ParseFloat(val,v)) g_antiAimSpeed=v; else ok=false; return true; }
+    if(key=="auto_fire"){ g_autoFireEnabled=ParseBool(val); return true; }
+    if(key=="auto_scope"){ g_autoScopeEnabled=ParseBool(val); return true; }
+    if(key=="force_body"){ g_forceBodyEnabled=ParseBool(val); return true; }
+    if(key=="force_body_hp"){ int v; if(ParseInt(val,v)) g_forceBodyHp=v; else ok=false; return true; }
+    if(key=="min_damage"){ int v; if(ParseInt(val,v)) g_minDamage=v; else ok=false; return true; }
+    if(key=="hitchance"){ float v; if(ParseFloat(val,v)) g_hitchance=v; else ok=false; return true; }
     if(key=="rcs_enabled"){ g_rcsEnabled=ParseBool(val); return true; }
     if(key=="rcs_x"){ float v; if(ParseFloat(val,v)){ g_rcsX=v; rcsXSet=true; } else ok=false; return true; }
     if(key=="rcs_y"){ float v; if(ParseFloat(val,v)){ g_rcsY=v; rcsYSet=true; } else ok=false; return true; }
@@ -348,6 +357,9 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="tb_team"){ g_tbTeamChk=ParseBool(val); return true; }
     if(key=="dt_enabled"){ g_dtEnabled=ParseBool(val); return true; }
     if(key=="dt_key"){ int v; if(ParseInt(val,v)) g_dtKey=v; else ok=false; return true; }
+    if(key=="dt_burst_count"){ int v; if(ParseInt(val,v)) g_dtBurstCount=v; else ok=false; return true; }
+    if(key=="auto_peek"){ g_autoPeekEnabled=ParseBool(val); return true; }
+    if(key=="auto_peek_key"){ int v; if(ParseInt(val,v)) g_autoPeekKey=v; else ok=false; return true; }
     return false;
 }
 static bool LoadConfigKeyMovement(const std::string& key, const std::string& val, bool& ok){
@@ -357,6 +369,11 @@ static bool LoadConfigKeyMovement(const std::string& key, const std::string& val
     if(key=="night_mode_overlay"){ g_nightModeOverlay=ParseBool(val); return true; }
     if(key=="fov_enabled"){ g_fovEnabled=ParseBool(val); return true; }
     if(key=="fov_value"){ float v; if(ParseFloat(val,v)) g_fovValue=v; else ok=false; return true; }
+    if(key=="thirdperson"){ g_thirdPersonEnabled=ParseBool(val); return true; }
+    if(key=="thirdperson_key"){ int v; if(ParseInt(val,v)) g_thirdPersonKey=v; else ok=false; return true; }
+    if(key=="no_punch_visual"){ g_noPunchVisual=ParseBool(val); return true; }
+    if(key=="rage_crosshair"){ g_rageCrosshairEnabled=ParseBool(val); return true; }
+    if(key=="rage_crosshair_col"){ if(!ParseColor4(val,g_rageCrosshairCol)) ok=false; return true; }
     return false;
 }
 static bool LoadConfigKeyVisual(const std::string& key, const std::string& val, bool& ok){
@@ -648,6 +665,15 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "wait_aim_fire", g_waitAimThenFire);
     WriteFloat(out, "wait_aim_deg", g_waitAimFovDeg);
     WriteBool(out, "autostop", g_autostopEnabled);
+    WriteBool(out, "anti_aim", g_antiAimEnabled);
+    WriteInt(out, "anti_aim_type", g_antiAimType);
+    WriteFloat(out, "anti_aim_speed", g_antiAimSpeed);
+    WriteBool(out, "auto_fire", g_autoFireEnabled);
+    WriteBool(out, "auto_scope", g_autoScopeEnabled);
+    WriteBool(out, "force_body", g_forceBodyEnabled);
+    WriteInt(out, "force_body_hp", g_forceBodyHp);
+    WriteInt(out, "min_damage", g_minDamage);
+    WriteFloat(out, "hitchance", g_hitchance);
     WriteBool(out, "rcs_enabled", g_rcsEnabled);
     WriteFloat(out, "rcs_x", g_rcsX);
     WriteFloat(out, "rcs_y", g_rcsY);
@@ -659,12 +685,20 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "tb_team", g_tbTeamChk);
     WriteBool(out, "dt_enabled", g_dtEnabled);
     WriteInt(out, "dt_key", g_dtKey);
+    WriteInt(out, "dt_burst_count", g_dtBurstCount);
+    WriteBool(out, "auto_peek", g_autoPeekEnabled);
+    WriteInt(out, "auto_peek_key", g_autoPeekKey);
     WriteBool(out, "bhop", g_bhopEnabled);
     WriteBool(out, "strafe_enabled", g_strafeEnabled);
     WriteInt(out, "strafe_key", g_strafeKey);
     WriteBool(out, "night_mode_overlay", g_nightModeOverlay);
     WriteBool(out, "fov_enabled", g_fovEnabled);
     WriteFloat(out, "fov_value", g_fovValue);
+    WriteBool(out, "thirdperson", g_thirdPersonEnabled);
+    WriteInt(out, "thirdperson_key", g_thirdPersonKey);
+    WriteBool(out, "no_punch_visual", g_noPunchVisual);
+    WriteBool(out, "rage_crosshair", g_rageCrosshairEnabled);
+    WriteColor(out, "rage_crosshair_col", g_rageCrosshairCol);
     WriteBool(out, "fov_circle", g_fovCircleEnabled);
     WriteColor(out, "fov_circle_col", g_fovCircleCol);
     WriteBool(out, "hands_color_enabled", g_handsColorEnabled);
@@ -784,5 +818,11 @@ static bool LoadConfig(const char* name){
     g_damageFloaterAnchor &= 1;
     g_soundPuddleScale = Clampf(g_soundPuddleScale, 0.3f, 3.0f);
     g_soundPuddleAlpha = Clampf(g_soundPuddleAlpha, 0.f, 2.0f);
+    g_antiAimSpeed = Clampf(g_antiAimSpeed, 100.f, 1800.f);
+    if(g_antiAimType < 0 || g_antiAimType > 2) g_antiAimType = 0;
+    g_forceBodyHp = (g_forceBodyHp < 1) ? 1 : (g_forceBodyHp > 100) ? 100 : g_forceBodyHp;
+    g_minDamage = (g_minDamage < 0) ? 0 : (g_minDamage > 100) ? 100 : g_minDamage;
+    g_hitchance = Clampf(g_hitchance, 0.f, 100.f);
+    g_dtBurstCount = (g_dtBurstCount < 2) ? 2 : (g_dtBurstCount > 5) ? 5 : g_dtBurstCount;
     return ok;
 }
