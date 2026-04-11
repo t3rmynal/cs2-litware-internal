@@ -1060,8 +1060,9 @@ static void RenderFrame(IDXGISwapChain*sc){
             ReleaseRuntimeInputs();
         }else{
             RunBHop();
+            RunAntiAim();
             RunAutoScope();RunAutostop();RunAutoPeek();
-            RunAimbot();RunRCS();RunNoPunchVisual();RunAntiAim();
+            RunAimbot();RunRCS();RunNoPunchVisual();
             RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
         }
     }else{

@@ -926,9 +926,8 @@ static void RunAntiAim(){
     if(!g_antiAimEnabled||!g_client||g_menuOpen)return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
+    // не ломать углы в момент стрельбы
     if(shots>0)return;
-    // не ломать углы когда aimbot стреляет
-    if(g_aimbotLastFound)return;
 
     // Z/C управление десинком
     if(GetAsyncKeyState('Z')&1) g_aaDesyncDir=(g_aaDesyncDir==1)?0:1;
