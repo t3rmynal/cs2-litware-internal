@@ -1037,25 +1037,42 @@ static void RunAutoPeek(){
     }
 }
 
+static void NopThirdPersonCheck(){
+    // нопаем проверку sv_cheats для thirdperson (один раз)
+    static bool s_nopped = false;
+    if(s_nopped) return;
+    HMODULE client = GetModuleHandleA("client.dll");
+    if(!client) return;
+    // ищем mov eax,[reg+offset] рядом с thirdperson check
+    // паттерн: 44 38 20 (cmp [rax+...], r12b) — проверка sv_cheats
+    static const char PAT[] = "\x44\x38\x20";
+    static const char MSK[] = "xxx";
+    // сканируем client.dll
+    void* hit = PatternScan(client, PAT, MSK);
+    if(hit){
+        uint8_t* addr = (uint8_t*)hit;
+        DWORD old;
+        if(VirtualProtect(addr, 3, PAGE_EXECUTE_READWRITE, &old)){
+            addr[0] = 0x90; addr[1] = 0x90; addr[2] = 0x90;
+            FlushInstructionCache(GetCurrentProcess(), addr, 3);
+            VirtualProtect(addr, 3, old, &old);
+            s_nopped = true;
+            BootstrapLog("[thirdperson] sv_cheats check nopped");
+        }
+    }
+}
+
 static void RunThirdPerson(){
     if(!g_client)return;
     bool want=g_thirdPersonEnabled&&!g_menuOpen;
-    if(!want){
-        // выключаем если было включено
-        __try{
-            uintptr_t p=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
-            if(p&&IsLikelyPtr(p)) Wr<bool>(p+offsets::csgo_input::m_in_thirdperson, false);
-        }__except(EXCEPTION_EXECUTE_HANDLER){}
-        return;
-    }
+    // dwCSGOInput прямой offset от client.dll, пишем int 256/0
+    uintptr_t addr = g_client + offsets::client::dwCSGOInput + offsets::csgo_input::m_in_thirdperson;
     __try{
-        // пробуем как указатель
-        uintptr_t p=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
-        if(p&&IsLikelyPtr(p)){
-            Wr<bool>(p+offsets::csgo_input::m_in_thirdperson, true);
+        if(want){
+            NopThirdPersonCheck();
+            Wr<int>(addr, 256);
         }else{
-            // пробуем как прямой offset
-            Wr<bool>(g_client+offsets::client::dwCSGOInput+offsets::csgo_input::m_in_thirdperson, true);
+            Wr<int>(addr, 0);
         }
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
