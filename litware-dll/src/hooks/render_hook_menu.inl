@@ -1084,9 +1084,10 @@ static void DrawMenu(){
         }
         EndPidoGroup();
 
-        float aaH = grpH(4);
+        float aaH = grpH(g_antiAimEnabled ? 4 : 2);
         float tbH = grpH(3);
         float rcsH = contentH - aaH - tbH - gap*2;
+        if(rcsH < 40.f * s) rcsH = 40.f * s;
         ImGui::SetCursorPos({rightX, contentY});
         BeginPidoGroup("##g_aa", "Anti-Aim", {childW, aaH});
         PidoToggle("Enable##aa","", &g_antiAimEnabled);
@@ -1259,7 +1260,8 @@ static void DrawMenu(){
         PidoToggle("Keybinds","", &g_keybindsEnabled);
         EndPidoGroup();
 
-        float viewH   = grpH(7);
+        int viewRows = 2 + (g_thirdPersonEnabled?1:0) + 1 + (g_rageCrosshairEnabled?1:0) + 1;
+        float viewH   = grpH(viewRows);
         float configH = contentH - viewH - gap;
         if (configH < 40.f * s) configH = 40.f * s;
 
