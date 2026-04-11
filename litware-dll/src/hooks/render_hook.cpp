@@ -192,8 +192,10 @@ static float g_aimbotLastBestFov = 1e9f;
 static bool g_aimbotLastFound = false;
 // rage
 static bool g_antiAimEnabled = false;
-static int g_antiAimType = 0;     // 0 spin 1 jitter 2 static
+static int g_antiAimType = 3;     // 0 spin 1 jitter 2 static 3 smart
 static float g_antiAimSpeed = 720.f;
+static float g_antiAimPitch = -89.f;
+static int g_aaDesyncDir = 0;     // 0 back 1 left 2 right (Z/C управление)
 static bool g_autoFireEnabled = false;
 static bool g_autoScopeEnabled = false;
 static bool g_forceBodyEnabled = false;
@@ -1107,7 +1109,7 @@ static void RenderFrame(IDXGISwapChain*sc){
         DebugLog("[draw] esp");
         DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
         DrawSoundPings(io.DeltaTime);
-        DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); DrawRageCrosshair(sw, sh); }
+        DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); DrawRageCrosshair(sw, sh); DrawAntiAimIndicator(sw, sh); }
     DebugLog("[draw] hud");
     DrawLogs(io.DeltaTime, sw, sh);
     DrawDamageFloaters(sw, sh);

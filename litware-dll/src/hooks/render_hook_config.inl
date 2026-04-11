@@ -340,6 +340,7 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="anti_aim"){ g_antiAimEnabled=ParseBool(val); return true; }
     if(key=="anti_aim_type"){ int v; if(ParseInt(val,v)) g_antiAimType=v; else ok=false; return true; }
     if(key=="anti_aim_speed"){ float v; if(ParseFloat(val,v)) g_antiAimSpeed=v; else ok=false; return true; }
+    if(key=="anti_aim_pitch"){ float v; if(ParseFloat(val,v)) g_antiAimPitch=v; else ok=false; return true; }
     if(key=="auto_fire"){ g_autoFireEnabled=ParseBool(val); return true; }
     if(key=="auto_scope"){ g_autoScopeEnabled=ParseBool(val); return true; }
     if(key=="force_body"){ g_forceBodyEnabled=ParseBool(val); return true; }
@@ -665,6 +666,7 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "anti_aim", g_antiAimEnabled);
     WriteInt(out, "anti_aim_type", g_antiAimType);
     WriteFloat(out, "anti_aim_speed", g_antiAimSpeed);
+    WriteFloat(out, "anti_aim_pitch", g_antiAimPitch);
     WriteBool(out, "auto_fire", g_autoFireEnabled);
     WriteBool(out, "auto_scope", g_autoScopeEnabled);
     WriteBool(out, "force_body", g_forceBodyEnabled);
@@ -813,7 +815,8 @@ static bool LoadConfig(const char* name){
     g_soundPuddleScale = Clampf(g_soundPuddleScale, 0.3f, 3.0f);
     g_soundPuddleAlpha = Clampf(g_soundPuddleAlpha, 0.f, 2.0f);
     g_antiAimSpeed = Clampf(g_antiAimSpeed, 100.f, 1800.f);
-    if(g_antiAimType < 0 || g_antiAimType > 2) g_antiAimType = 0;
+    if(g_antiAimType < 0 || g_antiAimType > 3) g_antiAimType = 3;
+    g_antiAimPitch = Clampf(g_antiAimPitch, -89.f, 89.f);
     g_forceBodyHp = (g_forceBodyHp < 1) ? 1 : (g_forceBodyHp > 100) ? 100 : g_forceBodyHp;
     g_minDamage = (g_minDamage < 0) ? 0 : (g_minDamage > 100) ? 100 : g_minDamage;
     g_hitchance = Clampf(g_hitchance, 0.f, 100.f);

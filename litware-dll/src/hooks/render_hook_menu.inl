@@ -1285,7 +1285,7 @@ static void DrawMenu(){
         if(g_rageCrosshairEnabled) PidoColorEdit4("Crosshair color","", g_rageCrosshairCol);
         EndPidoGroup();
 
-        float aaH = grpH(g_antiAimEnabled ? 4 : 2);
+        float aaH = grpH(g_antiAimEnabled ? 5 : 2);
         float peekH = grpH(g_autoPeekEnabled ? 3 : 2);
         float dtH = contentH - aaH - peekH - gap*2;
         if(dtH < 40.f * s) dtH = 40.f * s;
@@ -1294,9 +1294,11 @@ static void DrawMenu(){
         BeginPidoGroup("##g_aa", "Anti-Aim", {childW, aaH});
         PidoToggle("Enable##aa","", &g_antiAimEnabled);
         if(g_antiAimEnabled){
-            const char* aaTypes[]={"Spin","Jitter","Static"};
+            const char* aaTypes[]={"Spin","Jitter","Static","Smart"};
             PidoCombo("Type","", &g_antiAimType, aaTypes, IM_ARRAYSIZE(aaTypes));
-            PidoSliderFloat("Speed","", &g_antiAimSpeed, 100.f, 1800.f, "%.0f");
+            if(g_antiAimType==0) PidoSliderFloat("Speed","", &g_antiAimSpeed, 100.f, 1800.f, "%.0f");
+            PidoSliderFloat("Pitch","", &g_antiAimPitch, -89.f, 89.f, "%.0f");
+            PidoTooltip("Z = desync left, C = desync right");
         }
         EndPidoGroup();
 
@@ -1334,23 +1336,29 @@ static void DrawKeybindsWindow(){
         bool always;
     };
 
-    KeybindRow rows[4]{};
+    KeybindRow rows[10]{};
     int rowCount = 0;
     auto addRow = [&](bool enabled, const char* label, int key, bool active, bool always){
-        if(!enabled) return;
+        if(!enabled || rowCount >= 10) return;
         if(!g_menuOpen && !active) return;
         rows[rowCount++] = {label, key, active, always};
     };
 
-    bool aimActive = g_aimbotEnabled && g_aimbotKey != 0 && (GetAsyncKeyState(g_aimbotKey)&0x8000);
+    bool aimActive = g_aimbotEnabled && (g_autoFireEnabled || (g_aimbotKey != 0 && (GetAsyncKeyState(g_aimbotKey)&0x8000)));
     bool tbActive = g_tbEnabled && (g_tbKey == 0 || (GetAsyncKeyState(g_tbKey)&0x8000));
-    bool dtActive = g_dtEnabled && g_dtKey != 0 && (GetAsyncKeyState(g_dtKey)&0x8000);
+    bool dtActive = g_dtEnabled && (g_dtKey == 0 || (GetAsyncKeyState(g_dtKey)&0x8000));
     bool strafeActive = g_strafeEnabled && (g_strafeKey == 0 || (GetAsyncKeyState(g_strafeKey)&0x8000));
+    bool aaActive = g_antiAimEnabled;
+    bool peekActive = g_autoPeekEnabled && g_peekState > 0;
 
-    addRow(g_aimbotEnabled && g_aimbotKey != 0, "Aimbot", g_aimbotKey, aimActive, false);
+    addRow(g_aimbotEnabled, "Aimbot", g_aimbotKey, aimActive, g_autoFireEnabled);
+    addRow(g_autoFireEnabled, "Auto-fire", 0, g_autoFireEnabled, true);
+    addRow(g_antiAimEnabled, "Anti-aim", 0, aaActive, true);
     addRow(g_tbEnabled, "Triggerbot", g_tbKey, tbActive, g_tbKey == 0);
-    addRow(g_dtEnabled && g_dtKey != 0, "Double tap", g_dtKey, dtActive, false);
+    addRow(g_dtEnabled, "Double tap", g_dtKey, dtActive, g_dtKey == 0);
     addRow(g_strafeEnabled, "Auto strafe", g_strafeKey, strafeActive, g_strafeKey == 0);
+    addRow(g_autoPeekEnabled, "Auto-peek", g_autoPeekKey, peekActive, g_autoPeekKey == 0);
+    addRow(g_thirdPersonEnabled && g_thirdPersonActive, "Third person", g_thirdPersonKey, true, g_thirdPersonKey == 0);
 
     if(rowCount <= 0) return;
 

@@ -918,23 +918,64 @@ static float RandfRage(float lo,float hi){
     std::uniform_real_distribution<float>d(lo,hi);return d(g_rageRng);
 }
 
+static float GetAngleToNearestEnemy(uintptr_t lp, const Vec3& localOrigin){
+    float bestDist=1e9f; float bestAngle=0.f;
+    int localTeam=g_esp_local_team;
+    for(int i=0;i<g_esp_count;i++){
+        const ESPEntry&e=g_esp_players[i];
+        if(!e.valid||e.team==localTeam)continue;
+        float dx=e.origin_x-localOrigin.x, dy=e.origin_y-localOrigin.y;
+        float dist=sqrtf(dx*dx+dy*dy);
+        if(dist<bestDist){ bestDist=dist; bestAngle=atan2f(dy,dx)*(180.f/3.14159265f); }
+    }
+    return bestAngle;
+}
+
 static void RunAntiAim(){
     if(!g_antiAimEnabled||!g_client||g_menuOpen)return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
     if(shots>0)return;
-    if(g_aimbotLastFound && g_aimbotEnabled && (GetAsyncKeyState(g_aimbotKey)&0x8000))return;
+    if(g_autoFireEnabled && g_aimbotLastFound)return;
+    if(!g_autoFireEnabled && g_aimbotLastFound && g_aimbotEnabled && (GetAsyncKeyState(g_aimbotKey)&0x8000))return;
+
+    // Z/C управление десинком
+    if(GetAsyncKeyState('Z')&1) g_aaDesyncDir=(g_aaDesyncDir==1)?0:1;
+    if(GetAsyncKeyState('C')&1) g_aaDesyncDir=(g_aaDesyncDir==2)?0:2;
+
     uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
     float yaw=Rd<float>(vaAddr+4);
     static float s_spinYaw=0.f;
+
     switch(g_antiAimType){
-        case 0: s_spinYaw+=g_antiAimSpeed*(1.f/64.f); if(s_spinYaw>180.f)s_spinYaw-=360.f; yaw=s_spinYaw; break;
-        case 1: yaw+=RandfRage(-180.f,180.f); break;
-        case 2: yaw+=180.f; break;
+        case 0: // spin
+            s_spinYaw+=g_antiAimSpeed*(1.f/64.f);
+            if(s_spinYaw>180.f)s_spinYaw-=360.f;
+            yaw=s_spinYaw;
+            break;
+        case 1: // jitter
+            yaw+=RandfRage(-180.f,180.f);
+            break;
+        case 2: // static backwards
+            yaw+=180.f;
+            break;
+        case 3: { // smart: от противника + desync
+            uintptr_t scn=Rd<uintptr_t>(lp+offsets::base_entity::m_pGameSceneNode);
+            Vec3 origin{};
+            if(scn) origin=Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
+            float enemyAngle=GetAngleToNearestEnemy(lp, origin);
+            yaw = enemyAngle + 180.f; // спиной к врагу
+            // десинк Z/C
+            if(g_aaDesyncDir==1) yaw -= 90.f;      // голова влево
+            else if(g_aaDesyncDir==2) yaw += 90.f;  // голова вправо
+            // добавляем jitter для усложнения резолва
+            yaw += RandfRage(-8.f, 8.f);
+            break;
+        }
     }
     if(yaw>180.f)yaw-=360.f; else if(yaw<-180.f)yaw+=360.f;
-    Wr<float>(vaAddr,-89.f);
-    Wr<float>(vaAddr+4,yaw);
+    Wr<float>(vaAddr, g_antiAimPitch);
+    Wr<float>(vaAddr+4, yaw);
 }
 
 static bool IsSniper(int wId){ return wId==9||wId==11||wId==38||wId==40; }
@@ -1019,6 +1060,26 @@ static void RunNoPunchVisual(){
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     Vec3 zero{};
     Wr<Vec3>(lp+offsets::cs_pawn::m_aimPunchAngle, zero);
+}
+
+static void DrawAntiAimIndicator(float sw, float sh){
+    if(!g_antiAimEnabled)return;
+    auto*dl=ImGui::GetBackgroundDrawList();
+    float cx=sw*0.5f, cy=sh*0.5f+30.f;
+    ImFont* f=font::bold?font::bold:ImGui::GetFont();
+
+    // направление десинка
+    const char* dirText = g_aaDesyncDir==1 ? "< LEFT" : g_aaDesyncDir==2 ? "RIGHT >" : "BACK";
+    ImU32 dirCol = g_aaDesyncDir==0 ? IM_COL32(255,255,255,200) :
+                   g_aaDesyncDir==1 ? IM_COL32(100,200,255,255) : IM_COL32(255,150,100,255);
+    ImVec2 ts=f->CalcTextSizeA(12.f,FLT_MAX,0.f,dirText);
+    dl->AddText(f,12.f,{cx-ts.x*0.5f, cy},dirCol,dirText);
+
+    // тип AA
+    const char* typeNames[]={"SPIN","JITTER","STATIC","SMART"};
+    const char* tn = (g_antiAimType>=0&&g_antiAimType<=3) ? typeNames[g_antiAimType] : "?";
+    ImVec2 ts2=f->CalcTextSizeA(10.f,FLT_MAX,0.f,tn);
+    dl->AddText(f,10.f,{cx-ts2.x*0.5f, cy+14.f},IM_COL32(180,180,180,180),tn);
 }
 
 static void DrawRageCrosshair(float sw, float sh){
