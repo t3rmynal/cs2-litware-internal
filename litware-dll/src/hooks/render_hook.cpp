@@ -960,7 +960,6 @@ static void InitImGui(IDXGISwapChain*sc){
     ImGuiIO& initIo = ImGui::GetIO();
     initIo.ConfigErrorRecoveryEnableAssert = false;
     initIo.ConfigErrorRecoveryEnableTooltip = false;
-    initIo.ConfigErrorRecoveryEnableDebugLog = false;
     g_imguiInitialized=true;DebugLog("[LitWare] ImGui OK");
 }
 
