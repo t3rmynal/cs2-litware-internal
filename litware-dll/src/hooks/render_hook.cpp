@@ -1051,24 +1051,19 @@ static void RenderFrame(IDXGISwapChain*sc){
     s_insWasDown=insDown;}
     if(GetAsyncKeyState(VK_END)&1){ReleaseRuntimeInputs();RequestUnload();return;}
     UpdateMenuCameraLock();
-    if(!g_safeMode){ __try{
-        DebugLog("[frame] BuildESPData");
+    if(!g_safeMode){
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
-        DebugLog("[frame] visuals");
         RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();
         RunSkinChanger();
         RunFOVChanger();RunThirdPerson();
         if(g_menuOpen){
             ReleaseRuntimeInputs();
         }else{
-            DebugLog("[frame] combat");
             RunBHop();
             RunAutoScope();RunAutostop();RunAutoPeek();
             RunAimbot();RunRCS();RunNoPunchVisual();RunAntiAim();
             RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
         }
-        DebugLog("[frame] ok");
-        }__except(EXCEPTION_EXECUTE_HANDLER){ DebugLog("[frame] CRASH code 0x%08lX", GetExceptionCode()); g_safeMode=true; }
     }else{
         ReleaseRuntimeInputs();
         g_esp_count=0;g_esp_oof_count=0;
@@ -1097,28 +1092,17 @@ static void RenderFrame(IDXGISwapChain*sc){
         io.MouseDown[0]=false;io.MouseDown[1]=false;
     }
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
-    __try{
-    DebugLog("[draw] particles");
     UpdateAndDrawParticles(io.DeltaTime, sw, sh);
-    DebugLog("[draw] menu");
-    __try{ DrawMenu(); }
-    __except(EXCEPTION_EXECUTE_HANDLER){
-        DebugLog("[draw] menu CRASH 0x%08lX", GetExceptionCode());
-        g_menuOpen = false;
-    }
+    DrawMenu();
     DrawDebugConsole();
     DrawKeybindsWindow();
     if(!g_safeMode){
-        DebugLog("[draw] esp");
         DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
         DrawSoundPings(io.DeltaTime);
         DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); DrawRageCrosshair(sw, sh); DrawAntiAimIndicator(sw, sh); }
-    DebugLog("[draw] hud");
     DrawLogs(io.DeltaTime, sw, sh);
     DrawDamageFloaters(sw, sh);
     DrawWatermark(sw);
-    DebugLog("[draw] render");
-    }__except(EXCEPTION_EXECUTE_HANDLER){ DebugLog("[draw] CRASH code 0x%08lX", GetExceptionCode()); g_safeMode=true; }
     ImGui::Render();
     g_context->OMSetRenderTargets(1,&g_rtv,nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

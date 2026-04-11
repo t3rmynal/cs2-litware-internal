@@ -26,6 +26,7 @@ target_compile_definitions(litware-dll
         _WINDOWS
         _USRDLL
         NOMINMAX
+        IMGUI_DISABLE_DEBUG_TOOLS
         $<$<CONFIG:Debug>:LITWARE_DEBUG>
 )
 
