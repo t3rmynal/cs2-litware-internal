@@ -275,6 +275,7 @@ static bool LoadConfigKeyEsp(const std::string& key, const std::string& val, boo
     if(key=="esp_scale"){ float v; if(ParseFloat(val,v)) g_espScale=v; else ok=false; return true; }
     if(key=="esp_preview_pos"){ int v; if(ParseInt(val,v)) g_espPreviewPos=v; else ok=false; return true; }
     if(key=="esp_health"){ g_espHealth=ParseBool(val); return true; }
+    if(key=="esp_health_text"){ g_espHealthText=ParseBool(val); return true; }
     if(key=="esp_health_pos"){ int v; if(ParseInt(val,v)) g_espHealthPos=v; else ok=false; return true; }
     if(key=="esp_health_style"){ int v; if(ParseInt(val,v)) g_espHealthStyle=v; else ok=false; return true; }
     if(key=="health_grad_col1"){ if(!ParseColor4(val,g_espHealthGradientCol1)) ok=false; return true; }
@@ -286,6 +287,7 @@ static bool LoadConfigKeyEsp(const std::string& key, const std::string& val, boo
     if(key=="esp_max_dist"){ float v; if(ParseFloat(val,v)) g_espMaxDist=v; else ok=false; return true; }
     if(key=="esp_skeleton"){ g_espSkeleton=ParseBool(val); return true; }
     if(key=="esp_lines"){ g_espLines=ParseBool(val); return true; }
+    if(key=="esp_line_anchor"){ int v; if(ParseInt(val,v)) g_espLineAnchor=v; else ok=false; return true; }
     if(key=="esp_oof"){ g_espOof=ParseBool(val); return true; }
     if(key=="esp_oof_size"){ float v; if(ParseFloat(val,v)) g_espOofSize=v; else ok=false; return true; }
     if(key=="skeleton_thick"){ float v; if(ParseFloat(val,v)) g_skeletonThick=v; else ok=false; return true; }
@@ -296,6 +298,7 @@ static bool LoadConfigKeyEsp(const std::string& key, const std::string& val, boo
     if(key=="esp_weapon_icon"){ g_espWeaponIcon=ParseBool(val); return true; }
     if(key=="esp_ammo"){ g_espAmmo=ParseBool(val); return true; }
     if(key=="esp_money"){ g_espMoney=ParseBool(val); return true; }
+    if(key=="esp_money_pos"){ int v; if(ParseInt(val,v)) g_espMoneyPos=v; else ok=false; return true; }
     if(key=="esp_head_forward"){ float v; if(ParseFloat(val,v)) g_espHeadForward=v; else ok=false; return true; }
     return false;
 }
@@ -330,6 +333,7 @@ static bool LoadConfigKeyAimbot(const std::string& key, const std::string& val, 
     if(key=="fov_circle_col"){ if(!ParseColor4(val,g_fovCircleCol)) ok=false; return true; }
     if(key=="aimbot_team"){ g_aimbotTeamChk=ParseBool(val); return true; }
     if(key=="aimbot_vis"){ g_aimbotVisCheck=ParseBool(val); return true; }
+    if(key=="aimbot_weapon_filter"){ int v; if(ParseInt(val,v)) g_aimbotWeaponFilter=v; else ok=false; return true; }
     if(key=="wait_aim_fire"){ g_waitAimThenFire=ParseBool(val); return true; }
     if(key=="wait_aim_deg"){ float v; if(ParseFloat(val,v)) g_waitAimFovDeg=v; else ok=false; return true; }
     if(key=="autostop"){ g_autostopEnabled=ParseBool(val); return true; }
@@ -404,6 +408,14 @@ static bool LoadConfigKeyMisc(const std::string& key, const std::string& val, bo
     if(key=="kill_notif"){ g_killNotifEnabled=ParseBool(val); return true; }
     if(key=="hit_sound"){ g_hitSoundEnabled=ParseBool(val); return true; }
     if(key=="hit_sound_type"){ int v; if(ParseInt(val,v)) g_hitSoundType=v; else ok=false; return true; }
+    if(key=="hitmarker"){ g_hitmarkerEnabled=ParseBool(val); return true; }
+    if(key=="hitmarker_duration"){ float v; if(ParseFloat(val,v)) g_hitmarkerDuration=v; else ok=false; return true; }
+    if(key=="hitmarker_style"){ int v; if(ParseInt(val,v)) g_hitmarkerStyle=v; else ok=false; return true; }
+    if(key=="hit_effect_type"){ int v; if(ParseInt(val,v)) g_hitEffectType=v; else ok=false; return true; }
+    if(key=="kill_effect_type"){ int v; if(ParseInt(val,v)) g_killEffectType=v; else ok=false; return true; }
+    if(key=="kill_effect_duration"){ float v; if(ParseFloat(val,v)) g_killEffectDuration=v; else ok=false; return true; }
+    if(key=="hit_effect_col"){ if(!ParseColor4(val,g_hitEffectCol)) ok=false; return true; }
+    if(key=="kill_effect_col"){ if(!ParseColor4(val,g_killEffectCol)) ok=false; return true; }
     if(key=="radar"){ g_radarEnabled=ParseBool(val); return true; }
     if(key=="radar_ingame"){ g_radarIngame=ParseBool(val); return true; }
     if(key=="radar_range"){ float v; if(ParseFloat(val,v)) g_radarRange=v; else ok=false; return true; }
@@ -567,6 +579,7 @@ static bool SaveConfig(const char* name){
     EnsureConfigDir();
     std::ofstream out(ConfigPath(name), std::ios::trunc);
     if(!out.is_open()) return false;
+    out << "version=2\n";
     WriteBool(out, "esp_enabled", g_espEnabled);
     WriteBool(out, "esp_draw_box", g_espDrawBox);
     WriteBool(out, "esp_only_vis", g_espOnlyVis);
@@ -581,6 +594,7 @@ static bool SaveConfig(const char* name){
     WriteFloat(out, "esp_scale", g_espScale);
     WriteInt(out, "esp_preview_pos", g_espPreviewPos);
     WriteBool(out, "esp_health", g_espHealth);
+    WriteBool(out, "esp_health_text", g_espHealthText);
     WriteInt(out, "esp_health_pos", g_espHealthPos);
     WriteInt(out, "esp_health_style", g_espHealthStyle);
     WriteColor(out, "health_grad_col1", g_espHealthGradientCol1);
@@ -592,6 +606,7 @@ static bool SaveConfig(const char* name){
     WriteFloat(out, "esp_max_dist", g_espMaxDist);
     WriteBool(out, "esp_skeleton", g_espSkeleton);
     WriteBool(out, "esp_lines", g_espLines);
+    WriteInt(out, "esp_line_anchor", g_espLineAnchor);
     WriteBool(out, "esp_oof", g_espOof);
     WriteFloat(out, "esp_oof_size", g_espOofSize);
     WriteFloat(out, "skeleton_thick", g_skeletonThick);
@@ -602,6 +617,7 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "esp_weapon_icon", g_espWeaponIcon);
     WriteBool(out, "esp_ammo", g_espAmmo);
     WriteBool(out, "esp_money", g_espMoney);
+    WriteInt(out, "esp_money_pos", g_espMoneyPos);
     WriteFloat(out, "esp_head_forward", g_espHeadForward);
     WriteBool(out, "no_flash", g_noFlash);
     WriteBool(out, "no_smoke", g_noSmoke);
@@ -628,7 +644,7 @@ static bool SaveConfig(const char* name){
     WriteInt(out, "aimbot_bone", g_aimbotBone);
     WriteBool(out, "aimbot_team", g_aimbotTeamChk);
     WriteBool(out, "aimbot_vis", g_aimbotVisCheck);
-
+    WriteInt(out, "aimbot_weapon_filter", g_aimbotWeaponFilter);
     WriteBool(out, "wait_aim_fire", g_waitAimThenFire);
     WriteFloat(out, "wait_aim_deg", g_waitAimFovDeg);
     WriteBool(out, "autostop", g_autostopEnabled);
@@ -679,6 +695,14 @@ static bool SaveConfig(const char* name){
     WriteBool(out, "kill_notif", g_killNotifEnabled);
     WriteBool(out, "hit_sound", g_hitSoundEnabled);
     WriteInt(out, "hit_sound_type", g_hitSoundType);
+    WriteBool(out, "hitmarker", g_hitmarkerEnabled);
+    WriteFloat(out, "hitmarker_duration", g_hitmarkerDuration);
+    WriteInt(out, "hitmarker_style", g_hitmarkerStyle);
+    WriteInt(out, "hit_effect_type", g_hitEffectType);
+    WriteInt(out, "kill_effect_type", g_killEffectType);
+    WriteFloat(out, "kill_effect_duration", g_killEffectDuration);
+    WriteColor(out, "hit_effect_col", g_hitEffectCol);
+    WriteColor(out, "kill_effect_col", g_killEffectCol);
     WriteBool(out, "radar", g_radarEnabled);
     WriteBool(out, "radar_ingame", g_radarIngame);
     WriteFloat(out, "radar_range", g_radarRange);
@@ -721,6 +745,7 @@ static bool LoadConfig(const char* name){
         if(pos == std::string::npos) continue;
         std::string key = line.substr(0, pos);
         std::string val = line.substr(pos + 1);
+        if(key=="version") continue;
         if(LoadConfigKeyEsp(key, val, ok)) continue;
         if(LoadConfigKeyChams(key, val, ok)) continue;
         if(LoadConfigKeyAimbot(key, val, ok, rcsXSet, rcsYSet)) continue;
