@@ -425,9 +425,6 @@ static bool LoadConfigKeyMisc(const std::string& key, const std::string& val, bo
     if(key=="kill_notif"){ g_killNotifEnabled=ParseBool(val); return true; }
     if(key=="hit_sound"){ g_hitSoundEnabled=ParseBool(val); return true; }
     if(key=="hit_sound_type"){ int v; if(ParseInt(val,v)) g_hitSoundType=v; else ok=false; return true; }
-    if(key=="hitmarker"){ g_hitmarkerEnabled=ParseBool(val); return true; }
-    if(key=="hitmarker_duration"){ float v; if(ParseFloat(val,v)) g_hitmarkerDuration=v; else ok=false; return true; }
-    if(key=="hitmarker_style"){ int v; if(ParseInt(val,v)) g_hitmarkerStyle=v; else ok=false; return true; }
     if(key=="hit_effect_type"){ int v; if(ParseInt(val,v)) g_hitEffectType=v; else ok=false; return true; }
     if(key=="kill_effect_type"){ int v; if(ParseInt(val,v)) g_killEffectType=v; else ok=false; return true; }
     if(key=="kill_effect_duration"){ float v; if(ParseFloat(val,v)) g_killEffectDuration=v; else ok=false; return true; }
