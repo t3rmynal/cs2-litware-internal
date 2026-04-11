@@ -5,15 +5,27 @@
 #include <ctime>
 
 #include <mutex>
+#include <deque>
 #include <vector>
 #include <string>
 
-static std::vector<std::string> g_logs;
+static std::deque<std::string> g_logs;
 static std::mutex g_logMutex;
+static FILE* g_logFile = nullptr;
+
+static FILE* EnsureLogFile() {
+    if (g_logFile) return g_logFile;
+    char path[MAX_PATH];
+    if (GetTempPathA(MAX_PATH, path) == 0) return nullptr;
+    char fullPath[MAX_PATH];
+    snprintf(fullPath, sizeof(fullPath), "%slitware_dll.log", path);
+    fopen_s(&g_logFile, fullPath, "a");
+    return g_logFile;
+}
 
 std::vector<std::string> GetDebugLogs() {
     std::lock_guard<std::mutex> lock(g_logMutex);
-    return g_logs;
+    return {g_logs.begin(), g_logs.end()};
 }
 
 void ClearDebugLogs() {
@@ -31,20 +43,16 @@ void BootstrapLog(const char* fmt, ...) {
     {
         std::lock_guard<std::mutex> lock(g_logMutex);
         g_logs.push_back(buf);
-        if (g_logs.size() > 500) g_logs.erase(g_logs.begin());
+        if (g_logs.size() > 500) g_logs.pop_front();
     }
 
-    char path[MAX_PATH];
-    if (GetTempPathA(MAX_PATH, path) == 0) return;
-    char fullPath[MAX_PATH];
-    snprintf(fullPath, sizeof(fullPath), "%slitware_dll.log", path);
-    FILE* f = nullptr;
-    if (fopen_s(&f, fullPath, "a") != 0 || !f) return;
+    FILE* f = EnsureLogFile();
+    if (!f) return;
     time_t t; time(&t);
     struct tm lt; if (localtime_s(&lt, &t) == 0)
         fprintf(f, "[%02d:%02d:%02d] ", lt.tm_hour, lt.tm_min, lt.tm_sec);
     fprintf(f, "%s\n", buf);
-    fclose(f);
+    fflush(f);
 }
 
 void DebugLog(const char* fmt, ...) {
@@ -57,20 +65,13 @@ void DebugLog(const char* fmt, ...) {
     {
         std::lock_guard<std::mutex> lock(g_logMutex);
         g_logs.push_back(buf);
-        if (g_logs.size() > 500) g_logs.erase(g_logs.begin());
+        if (g_logs.size() > 500) g_logs.pop_front();
     }
 
 #ifdef LITWARE_DEBUG
-    char path[MAX_PATH];
-    if (GetTempPathA(MAX_PATH, path) == 0) return;
-
-    char fullPath[MAX_PATH];
-    snprintf(fullPath, sizeof(fullPath), "%slitware_dll.log", path);
-
-    FILE* f = nullptr;
-    if (fopen_s(&f, fullPath, "a") != 0 || !f) return;
-
+    FILE* f = EnsureLogFile();
+    if (!f) return;
     fprintf(f, "%s\n", buf);
-    fclose(f);
+    fflush(f);
 #endif
 }
