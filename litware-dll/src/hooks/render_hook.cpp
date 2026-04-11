@@ -828,15 +828,15 @@ static uintptr_t ResolveHandle(uintptr_t entityList, uint32_t handle){
     return Rd<uintptr_t>(chunk + 112*(handle&0x1FF));
 }
 
-#include "render_hook_config.cpp"
+#include "render_hook_config.inl"
 
 static bool GetOofArrowPos(const float* vm, const Vec3& head, int sw, int sh, float& ox, float& oy);
 
-#include "render_hook_game.cpp"
+#include "render_hook_game.inl"
 
-#include "render_hook_menu.cpp"
+#include "render_hook_menu.inl"
 
-#include "render_hook_visuals.cpp"
+#include "render_hook_visuals.inl"
 
 static void InitImGui(IDXGISwapChain*sc){
     if(!sc)return;

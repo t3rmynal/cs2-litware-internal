@@ -878,12 +878,17 @@ static void PushNotification(const char*text,ImU32 color){
 
 static void PlayHitSound(int type){
     if(!g_hitSoundEnabled||type==0)return;
+    int freq=1100, dur=35;
     switch(type){
-        case 1: Beep(1000,40); break;
-        case 2: Beep(1400,30); break;
-        case 3: Beep(800,60); break;
-        default: Beep(1100,35); break;
+        case 1: freq=1000; dur=40; break;
+        case 2: freq=1400; dur=30; break;
+        case 3: freq=800;  dur=60; break;
     }
+    HANDLE h=CreateThread(nullptr,0,[](LPVOID p)->DWORD{
+        int f=(int)((uintptr_t)p>>16), d=(int)((uintptr_t)p&0xFFFF);
+        Beep(f,d); return 0;
+    },(LPVOID)(uintptr_t)((freq<<16)|dur),0,nullptr);
+    if(h) CloseHandle(h);
 }
 
 static void PushLog(const char* text, ImU32 color, int type){

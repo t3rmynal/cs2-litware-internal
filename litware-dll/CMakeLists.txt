@@ -74,11 +74,7 @@ if(MSVC)
         /W4
         /EHsc
         /sdl
-        /wd6011
-        /wd6387
         /wd6388
-        /wd6001
-        /wd4244
         /wd4101
         /wd4204
         /wd4309

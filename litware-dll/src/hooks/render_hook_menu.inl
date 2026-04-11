@@ -29,7 +29,7 @@ static LRESULT CALLBACK HookWndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 }
 
 static const char* KeyName(int vk){
-    static char buf[32];
+    thread_local char buf[32];
     if(vk==0)return "None";
     if(vk==VK_LBUTTON)return "LMB";
     if(vk==VK_RBUTTON)return "RMB";

@@ -27,7 +27,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved) {
         DebugLog("[litware] DLL_PROCESS_ATTACH");
         g_thisModule = hModule;
         DisableThreadLibraryCalls(hModule);
-        CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
+        HANDLE h = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
+        if (h) CloseHandle(h);
         break;
     case DLL_PROCESS_DETACH:
         BootstrapLog("[litware] DLL_PROCESS_DETACH");
