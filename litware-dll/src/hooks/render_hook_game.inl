@@ -726,7 +726,7 @@ static void RunStrafeHelper(){
 
 static constexpr int kEntityListStride = 112;
 static void RunTriggerBot(){
-    if(!g_tbEnabled||!g_client||g_menuOpen){ ClearTriggerInput(); return; }
+    if(!g_tbEnabled||!g_client||g_menuOpen||g_autoFireEnabled){ ClearTriggerInput(); return; }
     if(g_tbKey!=0&&!(GetAsyncKeyState(g_tbKey)&0x8000)){ ClearTriggerInput(); return; }
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp){ ClearTriggerInput(); return; }
     int entIdx=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
@@ -752,7 +752,7 @@ static void RunTriggerBot(){
 }
 
 static void ReleaseTriggerAttack(){
-    if(!g_client||!g_tbEnabled||g_menuOpen){ ClearTriggerInput(); return; }
+    if(!g_client||!g_tbEnabled||g_menuOpen||g_autoFireEnabled){ ClearTriggerInput(); return; }
     if(g_tbJustFired && g_tbHoldFramesLeft>0){
         Wr<int>(g_client+offsets::buttons::attack,65537);
         g_tbHoldFramesLeft--;
@@ -1040,11 +1040,22 @@ static void RunAutoPeek(){
 static void RunThirdPerson(){
     if(!g_client)return;
     bool want=g_thirdPersonEnabled&&!g_menuOpen;
+    if(!want){
+        // выключаем если было включено
+        __try{
+            uintptr_t p=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
+            if(p&&IsLikelyPtr(p)) Wr<bool>(p+offsets::csgo_input::m_in_thirdperson, false);
+        }__except(EXCEPTION_EXECUTE_HANDLER){}
+        return;
+    }
     __try{
-        // dwCSGOInput указывает на указатель на CSGOInput
-        uintptr_t csgoInputPtr=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
-        if(csgoInputPtr && IsLikelyPtr(csgoInputPtr)){
-            Wr<bool>(csgoInputPtr+offsets::csgo_input::m_in_thirdperson, want);
+        // пробуем как указатель
+        uintptr_t p=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
+        if(p&&IsLikelyPtr(p)){
+            Wr<bool>(p+offsets::csgo_input::m_in_thirdperson, true);
+        }else{
+            // пробуем как прямой offset
+            Wr<bool>(g_client+offsets::client::dwCSGOInput+offsets::csgo_input::m_in_thirdperson, true);
         }
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
