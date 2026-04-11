@@ -1043,19 +1043,24 @@ static void RenderFrame(IDXGISwapChain*sc){
     }
     if(GetAsyncKeyState(VK_END)&1){ReleaseRuntimeInputs();RequestUnload();return;}
     UpdateMenuCameraLock();
-    if(!g_safeMode){
+    if(!g_safeMode){ __try{
+        DebugLog("[frame] BuildESPData");
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
+        DebugLog("[frame] visuals");
         RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();
         RunSkinChanger();
         RunFOVChanger();RunThirdPerson();
         if(g_menuOpen){
             ReleaseRuntimeInputs();
         }else{
+            DebugLog("[frame] combat");
             RunBHop();
             RunAutoScope();RunAutostop();RunAutoPeek();
             RunAimbot();RunRCS();RunNoPunchVisual();RunAntiAim();
             RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
         }
+        DebugLog("[frame] ok");
+        }__except(EXCEPTION_EXECUTE_HANDLER){ DebugLog("[frame] CRASH code 0x%08lX", GetExceptionCode()); g_safeMode=true; }
     }else{
         ReleaseRuntimeInputs();
         g_esp_count=0;g_esp_oof_count=0;
