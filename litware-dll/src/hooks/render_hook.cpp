@@ -674,8 +674,12 @@ static void EnsureCalcWorldSpaceBones(){
     }
 }
 
+static UINT64 g_frameCounter = 0;
+static std::unordered_map<uintptr_t, UINT64> g_boneCacheFrame;
+
 static void UpdatePawnBones(uintptr_t pawn){
     if(!pawn) return;
+    if(g_boneCacheFrame[pawn] == g_frameCounter && g_frameCounter > 0) return;
     EnsureCalcWorldSpaceBones();
     if(!g_calcWorldSpaceBones) return;
     uintptr_t body = Rd<uintptr_t>(pawn + offsets::base_entity::m_CBodyComponent);
@@ -684,6 +688,7 @@ static void UpdatePawnBones(uintptr_t pawn){
     if(!skel) return;
     __try{ g_calcWorldSpaceBones(reinterpret_cast<void*>(skel), 0xFFFFF); }
     __except(EXCEPTION_EXECUTE_HANDLER){}
+    g_boneCacheFrame[pawn] = g_frameCounter;
 }
 
 static bool IsFiniteVec3(const Vec3& v){
@@ -828,6 +833,12 @@ static uintptr_t ResolveHandle(uintptr_t entityList, uint32_t handle){
     return Rd<uintptr_t>(chunk + 112*(handle&0x1FF));
 }
 
+static uintptr_t ResolveEntityByIndex(uintptr_t entityList, int index){
+    uintptr_t chunk = Rd<uintptr_t>(entityList + 8*((index & 0x7FFF) >> 9) + 16);
+    if(!chunk) return 0;
+    return Rd<uintptr_t>(chunk + 112 * (index & 0x1FF));
+}
+
 #include "render_hook_config.inl"
 
 static bool GetOofArrowPos(const float* vm, const Vec3& head, int sw, int sh, float& ox, float& oy);
@@ -968,6 +979,8 @@ static void RequestUnload(){
 static void RenderFrame(IDXGISwapChain*sc){
     if(g_unloading)return;
     g_swapChain = sc;
+    ++g_frameCounter;
+    if(g_boneCacheFrame.size()>128) g_boneCacheFrame.clear();
     if(!g_firstFrame){DebugLog("[LitWare] first Present");g_firstFrame=true;}
     if(!g_imguiInitialized){InitImGui(sc);if(!g_imguiInitialized)return;}
     EnsureClientHooks();

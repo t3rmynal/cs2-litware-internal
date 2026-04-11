@@ -30,12 +30,10 @@ static void BuildESPData(){
     g_esp_local_team=localTeam;g_esp_local_pawn=localPawn;
     g_esp_screen_w=sw;g_esp_screen_h=sh;
     for(int i=1;i<64&&g_esp_count<ESP_MAX_PLAYERS;i++){
-        uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
-        uintptr_t ctrl=Rd<uintptr_t>(chunk+112*(i&0x1FF));if(!ctrl)continue;
+        uintptr_t ctrl=ResolveEntityByIndex(entityList,i);if(!ctrl)continue;
         if(!Rd<bool>(ctrl+offsets::controller::m_bPawnIsAlive))continue;
         uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn);if(!ph)continue;
-        uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16);if(!pchunk)continue;
-        uintptr_t pawn=Rd<uintptr_t>(pchunk+112*(ph&0x1FF));
+        uintptr_t pawn=ResolveHandle(entityList,ph);
         if(!pawn||pawn==localPawn)continue;
         int team=(int)Rd<uint8_t>(pawn+offsets::base_entity::m_iTeamNum);
         int health=Rd<int>(pawn+offsets::base_entity::m_iHealth);if(health<=0)continue;
@@ -423,8 +421,7 @@ static void RunNoSmoke(){
         g_lastNoSmokeTick = now;
         uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
         for(int i=0;i<2048;i++){
-            uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
-            uintptr_t ent=Rd<uintptr_t>(chunk+112*(i&0x1FF));if(!ent||!IsLikelyPtr(ent))continue;
+            uintptr_t ent=ResolveEntityByIndex(entityList,i);if(!ent||!IsLikelyPtr(ent))continue;
             __try{
                 uint8_t spawned=Rd<uint8_t>(ent+offsets::smoke_projectile::m_bSmokeEffectSpawned);
                 if(!spawned)continue;
@@ -444,14 +441,11 @@ static void RunGlow(){
             uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
             if(entityList){
                 for(int i=1;i<64;i++){
-                    uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
-                    uintptr_t ctrl=Rd<uintptr_t>(chunk+112*(i&0x1FF));if(!ctrl)continue;
+                    uintptr_t ctrl=ResolveEntityByIndex(entityList,i);if(!ctrl)continue;
                     uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn);if(!ph)continue;
-                    uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16);if(!pchunk)continue;
-                    uintptr_t pawn=Rd<uintptr_t>(pchunk+112*(ph&0x1FF));
+                    uintptr_t pawn=ResolveHandle(entityList,ph);
                     if(!pawn)continue;
-                    uintptr_t glowProp=pawn+offsets::model_entity::m_Glow;
-                    Wr<uint8_t>(glowProp+offsets::glow_prop::m_bGlowing,0);
+                    Wr<uint8_t>(pawn+offsets::model_entity::m_Glow+offsets::glow_prop::m_bGlowing,0);
                 }
             }
         }
@@ -459,27 +453,19 @@ static void RunGlow(){
         return;
     }
     s_wasActive = true;
-    uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
-    uintptr_t localPawn=g_esp_local_pawn;int localTeam=g_esp_local_team;
-    for(int i=1;i<64;i++){
-        uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
-        uintptr_t ctrl=Rd<uintptr_t>(chunk+112*(i&0x1FF));
-        if(!ctrl||!Rd<bool>(ctrl+offsets::controller::m_bPawnIsAlive))continue;
-        uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn);if(!ph)continue;
-        uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16);if(!pchunk)continue;
-        uintptr_t pawn=Rd<uintptr_t>(pchunk+112*(ph&0x1FF));
-        if(!pawn||pawn==localPawn)continue;
-        int health=Rd<int>(pawn+offsets::base_entity::m_iHealth);if(health<=0)continue;
-        int team=(int)Rd<uint8_t>(pawn+offsets::base_entity::m_iTeamNum);
-        bool isTeam = (team == localTeam);
+    int localTeam=g_esp_local_team;
+    for(int i=0;i<g_esp_count;i++){
+        const ESPEntry&e=g_esp_players[i];
+        if(!e.valid||!e.pawn)continue;
+        bool isTeam = (e.team == localTeam);
         bool applyChams = g_chamsEnabled && !g_chamsScene && (!g_chamsEnemyOnly || !isTeam);
         bool applyGlow = g_glowEnabled;
         bool apply = applyChams || applyGlow;
-        uintptr_t glowProp=pawn+offsets::model_entity::m_Glow;
+        uintptr_t glowProp=e.pawn+offsets::model_entity::m_Glow;
         if(apply){
             float* col = nullptr;
             if(applyChams){
-                if(!isTeam && g_chamsIgnoreZ && i > 0 && i <= ESP_MAX_PLAYERS && !g_visMap[i]){
+                if(!isTeam && g_chamsIgnoreZ && !e.visible){
                     col = g_chamsIgnoreZCol;
                 }else{
                     col = isTeam ? g_chamsTeamCol : g_chamsEnemyCol;
@@ -507,21 +493,12 @@ static void RunGlow(){
 
 static void RunRadarHack(){
     if(!g_radarIngame||!g_client)return;
-    uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList)return;
-    uintptr_t localPawn=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!localPawn)return;
-    int localTeam=(int)Rd<uint8_t>(localPawn+offsets::base_entity::m_iTeamNum);
-    for(int i=1;i<64;i++){
-        uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16);if(!chunk)continue;
-        uintptr_t ctrl=Rd<uintptr_t>(chunk+112*(i&0x1FF));
-        if(!ctrl||!Rd<bool>(ctrl+offsets::controller::m_bPawnIsAlive))continue;
-        uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn);if(!ph)continue;
-        uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16);if(!pchunk)continue;
-        uintptr_t pawn=Rd<uintptr_t>(pchunk+112*(ph&0x1FF));
-        if(!pawn||pawn==localPawn)continue;
-        int health=Rd<int>(pawn+offsets::base_entity::m_iHealth);if(health<=0)continue;
-        int team=(int)Rd<uint8_t>(pawn+offsets::base_entity::m_iTeamNum);
-        if(team==localTeam)continue;
-        uintptr_t spotBase=pawn+offsets::spotted::m_entitySpottedState;
+    int localTeam=g_esp_local_team;
+    for(int i=0;i<g_esp_count;i++){
+        const ESPEntry&e=g_esp_players[i];
+        if(!e.valid||!e.pawn)continue;
+        if(e.team==localTeam)continue;
+        uintptr_t spotBase=e.pawn+offsets::spotted::m_entitySpottedState;
         Wr<uint8_t>(spotBase+offsets::spotted::m_bSpotted, 1);
         Wr<uint32_t>(spotBase+offsets::spotted::m_bSpottedByMask, 0xFFFFFFFF);
         Wr<uint32_t>(spotBase+offsets::spotted::m_bSpottedByMask+4, 0xFFFFFFFF);
@@ -724,8 +701,7 @@ static void RunTriggerBot(){
     int entIdx=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
     if(entIdx<=0||entIdx>8192){ ClearTriggerInput(); return; }
     uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!entityList){ ClearTriggerInput(); return; }
-    uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((entIdx&0x7FFF)>>9)+16);if(!pchunk){ ClearTriggerInput(); return; }
-    uintptr_t targPawn=Rd<uintptr_t>(pchunk+kEntityListStride*(entIdx&0x1FF));
+    uintptr_t targPawn=ResolveEntityByIndex(entityList,entIdx);
     if(!targPawn||!IsLikelyPtr(targPawn)){ ClearTriggerInput(); return; }
     int lifeState=Rd<uint8_t>(targPawn+offsets::base_entity::m_lifeState);
     if(lifeState!=0){ ClearTriggerInput(); return; }
@@ -808,13 +784,11 @@ static void RunAimbot(){
         uintptr_t localCtrl=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerController);
         if(entityList){
             for(int i=1;i<64;i++){
-                uintptr_t chunk=Rd<uintptr_t>(entityList+8*((i&0x7FFF)>>9)+16); if(!chunk)continue;
-                uintptr_t ctrl=Rd<uintptr_t>(chunk+kEntityListStride*(i&0x1FF)); if(!ctrl||!IsLikelyPtr(ctrl))continue;
+                uintptr_t ctrl=ResolveEntityByIndex(entityList,i); if(!ctrl||!IsLikelyPtr(ctrl))continue;
                 if(ctrl==localCtrl)continue;
                 if(!Rd<bool>(ctrl+offsets::controller::m_bPawnIsAlive))continue;
                 uint32_t ph=Rd<uint32_t>(ctrl+offsets::controller::m_hPlayerPawn); if(!ph)continue;
-                uintptr_t pchunk=Rd<uintptr_t>(entityList+8*((ph&0x7FFF)>>9)+16); if(!pchunk)continue;
-                uintptr_t pawn=Rd<uintptr_t>(pchunk+kEntityListStride*(ph&0x1FF)); if(!pawn||!IsLikelyPtr(pawn)||pawn==lp)continue;
+                uintptr_t pawn=ResolveHandle(entityList,ph); if(!pawn||!IsLikelyPtr(pawn)||pawn==lp)continue;
                 if(Rd<uint8_t>(pawn+offsets::base_entity::m_lifeState)!=0)continue;
                 if(Rd<int>(pawn+offsets::base_entity::m_iHealth)<=0)continue;
                 if(g_aimbotTeamChk && (int)Rd<uint8_t>(pawn+offsets::base_entity::m_iTeamNum)==localTeam)continue;
