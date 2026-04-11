@@ -653,13 +653,19 @@ static void RunRCS(){
     if(g_menuOpen)return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
 
-    float punchX=Rd<float>(lp+offsets::cs_pawn::m_aimPunchAngle);
-    float punchY=Rd<float>(lp+offsets::cs_pawn::m_aimPunchAngle+4);
-
     bool shooting=(GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0;
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
 
+    float punchX=Rd<float>(lp+offsets::cs_pawn::m_aimPunchAngle);
+    float punchY=Rd<float>(lp+offsets::cs_pawn::m_aimPunchAngle+4);
+
     if(!shooting || shots<1){
+        g_rcsPrevPunchX=punchX;
+        g_rcsPrevPunchY=punchY;
+        return;
+    }
+
+    if(Rd<bool>(lp+offsets::cs_pawn::m_bIsScoped)){
         g_rcsPrevPunchX=punchX;
         g_rcsPrevPunchY=punchY;
         return;
@@ -684,14 +690,16 @@ static void RunRCS(){
 }
 
 static void RunStrafeHelper(){
-    if(!g_strafeEnabled||!g_client||g_menuOpen){ ClearStrafeInput(); return; }
-    if(g_strafeKey!=0&&!(GetAsyncKeyState(g_strafeKey)&0x8000)){ ClearStrafeInput(); return; }
-    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp){ ClearStrafeInput(); return; }
-    if(Rd<uint32_t>(lp+offsets::base_entity::m_fFlags)&1){ ClearStrafeInput(); return; }
-    
-    uintptr_t vaAddr=ViewAnglesAddr(); if(!vaAddr){ ClearStrafeInput(); return; }
+    static bool s_strafeWasActive = false;
+    if(!g_strafeEnabled||!g_client||g_menuOpen){ ClearStrafeInput(); s_strafeWasActive=false; return; }
+    if(g_strafeKey!=0&&!(GetAsyncKeyState(g_strafeKey)&0x8000)){ ClearStrafeInput(); s_strafeWasActive=false; return; }
+    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp){ ClearStrafeInput(); s_strafeWasActive=false; return; }
+    if(Rd<uint32_t>(lp+offsets::base_entity::m_fFlags)&1){ ClearStrafeInput(); s_strafeWasActive=false; return; }
+
+    uintptr_t vaAddr=ViewAnglesAddr(); if(!vaAddr){ ClearStrafeInput(); s_strafeWasActive=false; return; }
     float curYaw=Rd<float>(vaAddr+4);
     static float s_lastYaw = 0.f;
+    if(!s_strafeWasActive){ s_lastYaw=curYaw; s_strafeWasActive=true; return; }
     float delta = curYaw - s_lastYaw;
     if(delta > 180.f) delta -= 360.f; else if(delta < -180.f) delta += 360.f;
     s_lastYaw = curYaw;
@@ -725,6 +733,8 @@ static void RunTriggerBot(){
     int targHealth=Rd<int>(targPawn+offsets::base_entity::m_iHealth);
     if(targHealth<=0){ ClearTriggerInput(); return; }
     if(g_tbTeamChk&&targTeam==g_esp_local_team){ ClearTriggerInput(); return; }
+    static int s_tbLastEntIdx = 0;
+    if(entIdx != s_tbLastEntIdx){ g_tbShouldFire=false; s_tbLastEntIdx=entIdx; }
     if(!g_tbShouldFire){g_tbShouldFire=true;g_tbFireTime=GetTickCount64()+(UINT64)g_tbDelay;}
     if(GetTickCount64()>=g_tbFireTime){
         Wr<int>(g_client+offsets::buttons::attack,65537);
@@ -748,6 +758,16 @@ static void ReleaseTriggerAttack(){
     }
 }
 
+// 0 все 1 винтовки 2 снайперки 3 пистолеты
+static bool IsWeaponInFilterClass(int wId, int filter){
+    switch(filter){
+        case 1: return wId==7||wId==8||wId==10||wId==13||wId==14||wId==16||wId==17||wId==19||wId==24||wId==26||wId==27||wId==28||wId==29||wId==33||wId==34||wId==35||wId==39;
+        case 2: return wId==9||wId==11||wId==38||wId==40;
+        case 3: return wId==1||wId==2||wId==3||wId==4||wId==30||wId==32||wId==36||wId==61||wId==63||wId==64;
+        default: return true;
+    }
+}
+
 static void RunAimbot(){
     g_aimbotLastFound = false;
     g_aimbotLastBestFov = 1e9f;
@@ -755,6 +775,10 @@ static void RunAimbot(){
     if(g_menuOpen) return;
     if(!(GetAsyncKeyState(g_aimbotKey)&0x8000))return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
+    if(g_aimbotWeaponFilter!=0){
+        uintptr_t el=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
+        if(el){ int wId=GetWeaponId(GetActiveWeapon(lp,el)); if(!IsWeaponInFilterClass(wId,g_aimbotWeaponFilter))return; }
+    }
     uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
     uintptr_t sc0=Rd<uintptr_t>(lp+offsets::base_entity::m_pGameSceneNode);Vec3 localOrigin{};
     if(sc0)localOrigin=Rd<Vec3>(sc0+offsets::scene_node::m_vecAbsOrigin);
