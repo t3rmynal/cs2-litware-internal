@@ -1093,7 +1093,11 @@ static void RenderFrame(IDXGISwapChain*sc){
     DebugLog("[draw] particles");
     UpdateAndDrawParticles(io.DeltaTime, sw, sh);
     DebugLog("[draw] menu");
-    DrawMenu();
+    __try{ DrawMenu(); }
+    __except(EXCEPTION_EXECUTE_HANDLER){
+        DebugLog("[draw] menu CRASH 0x%08lX", GetExceptionCode());
+        g_menuOpen = false;
+    }
     DrawDebugConsole();
     DrawKeybindsWindow();
     if(!g_safeMode){

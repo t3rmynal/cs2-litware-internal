@@ -1043,6 +1043,7 @@ static void DrawMenu(){
 
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, animEased * tabAlphaEased);
 
+    DebugLog("[menu] tab %d", g_activeTab);
     if(g_activeTab==0){
         ImGui::SetCursorPos({contentX, contentY});
         BeginPidoGroup("##g_aim", "Aimbot", {childW, contentH});
