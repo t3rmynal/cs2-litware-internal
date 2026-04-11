@@ -1226,7 +1226,7 @@ static void DrawMenu(){
         }
         EndPidoGroup();
     }else if(g_activeTab==3){
-        int movRows = 3 + (g_strafeEnabled ? 1 : 0) + (g_dtEnabled ? 1 : 0);
+        int movRows = 3 + (g_strafeEnabled ? 1 : 0) + (g_dtEnabled ? 2 : 0) + 1 + (g_autoPeekEnabled ? 1 : 0);
         float movH   = grpH(movRows);
         float radH   = grpH(1);
         float hudH   = contentH - movH - radH - gap * 2.f;
