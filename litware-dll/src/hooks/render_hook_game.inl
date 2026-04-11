@@ -691,34 +691,21 @@ static void RunStrafeHelper(){
     if(delta > 180.f) delta -= 360.f; else if(delta < -180.f) delta += 360.f;
     s_lastYaw = curYaw;
 
-    Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
-    float speed=sqrtf(vel.x*vel.x+vel.y*vel.y);
-    if(speed<50.f){ ClearStrafeInput(); return; }
-
+    // source air strafe: жмём в сторону поворота мыши
     if(fabsf(delta) > 0.1f){
+        // мышь вправо = жми D, мышь влево = жми A
+        Wr<int>(g_client+offsets::buttons::forward, 0);
         if(delta > 0.f){
-            Wr<int>(g_client+offsets::buttons::left,  65537);
-            Wr<int>(g_client+offsets::buttons::right, 0);
-        } else {
             Wr<int>(g_client+offsets::buttons::right, 65537);
             Wr<int>(g_client+offsets::buttons::left,  0);
+        } else {
+            Wr<int>(g_client+offsets::buttons::left,  65537);
+            Wr<int>(g_client+offsets::buttons::right, 0);
         }
     }else{
-        // auto w-strafe при отсутствии поворота мыши
-        static bool s_strafeDir = false;
-        float idealDeg = atan2f(30.f, speed) * (180.f/3.14159265f);
-        if(s_strafeDir){
-            Wr<int>(g_client+offsets::buttons::left,  65537);
-            Wr<int>(g_client+offsets::buttons::right, 0);
-            Wr<float>(vaAddr+4, curYaw + idealDeg);
-        }else{
-            Wr<int>(g_client+offsets::buttons::right, 65537);
-            Wr<int>(g_client+offsets::buttons::left,  0);
-            Wr<float>(vaAddr+4, curYaw - idealDeg);
-        }
-        s_strafeDir = !s_strafeDir;
+        ClearStrafeInput();
+        return;
     }
-    Wr<int>(g_client+offsets::buttons::forward, 65537);
     g_strafeOwned = true;
 }
 
@@ -862,20 +849,20 @@ static void RunAimbot(){
 
 static void RunDoubleTap(){
     if(!g_dtEnabled||!g_client||g_menuOpen){ ClearDtInput(); g_dtBursting=false; return; }
-    if(g_dtKey==0||!(GetAsyncKeyState(g_dtKey)&0x8000)){ ClearDtInput(); g_dtBursting=false; return; }
+    bool keyHeld = g_dtKey==0 ? (GetAsyncKeyState(VK_LBUTTON)&0x8000)!=0
+                              : (GetAsyncKeyState(g_dtKey)&0x8000)!=0;
+    if(!keyHeld){ ClearDtInput(); g_dtBursting=false; return; }
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
     if(!lp){ ClearDtInput(); return; }
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
     if(!g_dtBursting){
         g_dtShotsStart=shots;
         g_dtBursting=true;
-        g_dtBurstEnd=GetTickCount64()+200;
+        g_dtBurstEnd=GetTickCount64()+300;
     }
     int fired=shots-g_dtShotsStart;
     if(fired>=g_dtBurstCount || GetTickCount64()>g_dtBurstEnd){
-        Wr<int>(g_client+offsets::buttons::attack,0);
         g_dtBursting=false;
-        g_dtOwned=false;
         return;
     }
     Wr<int>(g_client+offsets::buttons::attack,65537);
@@ -945,11 +932,11 @@ static void ClearPeekInput(){
 }
 
 static void RunAutoPeek(){
-    if(!g_autoPeekEnabled||!g_client||g_menuOpen||g_autoPeekKey==0){
+    if(!g_autoPeekEnabled||!g_client||g_menuOpen){
         if(g_peekState!=0){g_peekState=0;ClearPeekInput();}
         return;
     }
-    bool keyHeld=(GetAsyncKeyState(g_autoPeekKey)&0x8000)!=0;
+    bool keyHeld = g_autoPeekKey==0 || (GetAsyncKeyState(g_autoPeekKey)&0x8000)!=0;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp){g_peekState=0;ClearPeekInput();return;}
     uintptr_t scn=Rd<uintptr_t>(lp+offsets::base_entity::m_pGameSceneNode);
     Vec3 curPos{};
@@ -990,9 +977,11 @@ static void RunThirdPerson(){
     if(g_thirdPersonKey!=0 && (GetAsyncKeyState(g_thirdPersonKey)&1))
         g_thirdPersonActive=!g_thirdPersonActive;
     bool want=g_thirdPersonEnabled&&g_thirdPersonActive&&!g_menuOpen;
-    uintptr_t csgoInput=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
-    if(!csgoInput)return;
-    Wr<bool>(csgoInput+offsets::csgo_input::m_in_thirdperson, want);
+    uintptr_t csgoInputPtr=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
+    if(!csgoInputPtr)return;
+    __try{
+        Wr<bool>(csgoInputPtr+offsets::csgo_input::m_in_thirdperson, want);
+    }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
 
 static void RunNoPunchVisual(){
