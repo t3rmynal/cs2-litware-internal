@@ -22,7 +22,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved) {
     (void)lpReserved;
 
     switch (reason) {
-    case DLL_PROCESS_ATTACH:
+    case DLL_PROCESS_ATTACH: {
         BootstrapLog("[litware] DLL_PROCESS_ATTACH");
         DebugLog("[litware] DLL_PROCESS_ATTACH");
         g_thisModule = hModule;
@@ -30,6 +30,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved) {
         HANDLE h = CreateThread(nullptr, 0, ThreadProc, nullptr, 0, nullptr);
         if (h) CloseHandle(h);
         break;
+    }
     case DLL_PROCESS_DETACH:
         BootstrapLog("[litware] DLL_PROCESS_DETACH");
         DebugLog("[litware] DLL_PROCESS_DETACH");
