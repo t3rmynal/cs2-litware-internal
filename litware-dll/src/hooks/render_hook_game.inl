@@ -841,8 +841,22 @@ static void RunAimbot(){
     newPitch=Clampf(newPitch,-89.f,89.f);
     if(newYaw>180.f)newYaw-=360.f;else if(newYaw<-180.f)newYaw+=360.f;
     Wr<float>(vaAddr,newPitch);Wr<float>(vaAddr+4,newYaw);
-    if(g_autoFireEnabled && bestDist<=(g_waitAimThenFire?g_waitAimFovDeg:g_aimbotFov*0.5f)){
-        Wr<int>(g_client+offsets::buttons::attack,65537);
+    if(g_autoFireEnabled){
+        // проверяем что под прицелом враг через m_iIDEntIndex
+        int crossEnt=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
+        if(crossEnt>0 && crossEnt<=8192){
+            uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
+            if(entityList){
+                uintptr_t targPawn=ResolveEntityByIndex(entityList,crossEnt);
+                if(targPawn && IsLikelyPtr(targPawn)){
+                    int targTeam=(int)Rd<uint8_t>(targPawn+offsets::base_entity::m_iTeamNum);
+                    int targHp=Rd<int>(targPawn+offsets::base_entity::m_iHealth);
+                    if(targHp>0 && (!g_aimbotTeamChk || targTeam!=g_esp_local_team)){
+                        Wr<int>(g_client+offsets::buttons::attack,65537);
+                    }
+                }
+            }
+        }
     }
 }
 
