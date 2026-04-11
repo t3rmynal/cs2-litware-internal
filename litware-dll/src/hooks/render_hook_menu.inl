@@ -3,7 +3,12 @@
 static void PidoTooltip(const char* text){
     if(!text||!text[0]) return;
     if(!ImGui::IsItemHovered()) return;
-    if(ImGui::GetIO().MouseStationaryTimer < 0.4f) return;
+    static float s_hoverTime = 0.f;
+    static ImGuiID s_hoverId = 0;
+    ImGuiID cur = ImGui::GetItemID();
+    if(cur != s_hoverId){ s_hoverId = cur; s_hoverTime = 0.f; }
+    s_hoverTime += ImGui::GetIO().DeltaTime;
+    if(s_hoverTime < 0.4f) return;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6,4));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.f);
     ImGui::SetTooltip("%s", text);
