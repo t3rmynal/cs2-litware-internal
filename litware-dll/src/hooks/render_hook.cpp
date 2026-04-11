@@ -1047,13 +1047,13 @@ static void RenderFrame(IDXGISwapChain*sc){
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
         RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();
         RunSkinChanger();
-        RunFOVChanger();RunThirdPerson();RunNoPunchVisual();
+        RunFOVChanger();RunThirdPerson();
         if(g_menuOpen){
             ReleaseRuntimeInputs();
         }else{
             RunBHop();
             RunAutoScope();RunAutostop();RunAutoPeek();
-            RunAimbot();RunRCS();RunAntiAim();
+            RunAimbot();RunRCS();RunNoPunchVisual();RunAntiAim();
             RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
         }
     }else{

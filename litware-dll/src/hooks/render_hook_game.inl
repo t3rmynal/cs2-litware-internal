@@ -896,6 +896,11 @@ static void RunAimFireGate(){
 
 // --- rage ---
 
+static std::mt19937 g_rageRng{(unsigned)GetTickCount64()};
+static float RandfRage(float lo,float hi){
+    std::uniform_real_distribution<float>d(lo,hi);return d(g_rageRng);
+}
+
 static void RunAntiAim(){
     if(!g_antiAimEnabled||!g_client||g_menuOpen)return;
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
@@ -907,7 +912,7 @@ static void RunAntiAim(){
     static float s_spinYaw=0.f;
     switch(g_antiAimType){
         case 0: s_spinYaw+=g_antiAimSpeed*(1.f/64.f); if(s_spinYaw>180.f)s_spinYaw-=360.f; yaw=s_spinYaw; break;
-        case 1: yaw+=Randf(-180.f,180.f); break;
+        case 1: yaw+=RandfRage(-180.f,180.f); break;
         case 2: yaw+=180.f; break;
     }
     if(yaw>180.f)yaw-=360.f; else if(yaw<-180.f)yaw+=360.f;
