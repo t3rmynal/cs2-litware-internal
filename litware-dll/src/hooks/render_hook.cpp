@@ -1089,16 +1089,24 @@ static void RenderFrame(IDXGISwapChain*sc){
         io.MouseDown[0]=false;io.MouseDown[1]=false;
     }
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
+    __try{
+    DebugLog("[draw] particles");
     UpdateAndDrawParticles(io.DeltaTime, sw, sh);
+    DebugLog("[draw] menu");
     DrawMenu();
     DrawDebugConsole();
     DrawKeybindsWindow();
-    if(!g_safeMode){ DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
+    if(!g_safeMode){
+        DebugLog("[draw] esp");
+        DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
         DrawSoundPings(io.DeltaTime);
         DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); DrawRageCrosshair(sw, sh); }
+    DebugLog("[draw] hud");
     DrawLogs(io.DeltaTime, sw, sh);
     DrawDamageFloaters(sw, sh);
     DrawWatermark(sw);
+    DebugLog("[draw] render");
+    }__except(EXCEPTION_EXECUTE_HANDLER){ DebugLog("[draw] CRASH code 0x%08lX", GetExceptionCode()); g_safeMode=true; }
     ImGui::Render();
     g_context->OMSetRenderTargets(1,&g_rtv,nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
