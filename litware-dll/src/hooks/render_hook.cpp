@@ -190,6 +190,34 @@ static bool g_waitAimThenFire = true;
 static float g_waitAimFovDeg = 2.5f;
 static float g_aimbotLastBestFov = 1e9f;
 static bool g_aimbotLastFound = false;
+// rage
+static bool g_antiAimEnabled = false;
+static int g_antiAimType = 0;     // 0 spin 1 jitter 2 static
+static float g_antiAimSpeed = 720.f;
+static bool g_autoFireEnabled = false;
+static bool g_autoScopeEnabled = false;
+static bool g_forceBodyEnabled = false;
+static int g_forceBodyHp = 50;
+static int g_minDamage = 0;       // 0=off
+static float g_hitchance = 0.f;   // 0=off
+static float g_aimbotLastHitchance = 0.f;
+static bool g_autoPeekEnabled = false;
+static int g_autoPeekKey = 0;
+static Vec3 g_peekSavedPos{};
+static int g_peekState = 0;       // 0 idle 1 peeking 2 retreating
+static bool g_peekOwned = false;
+static int g_dtBurstCount = 2;
+static int g_dtShotsStart = 0;
+static bool g_dtBursting = false;
+static UINT64 g_dtBurstEnd = 0;
+// визуалы rage
+static bool g_thirdPersonEnabled = false;
+static int g_thirdPersonKey = 0;
+static bool g_thirdPersonActive = false;
+static bool g_noPunchVisual = false;
+static bool g_rageCrosshairEnabled = false;
+static float g_rageCrosshairCol[4]{0.1f,1.f,0.3f,1.f};
+
 static bool g_snowEnabled = false;
 static int g_snowDensity = 1;
 static bool g_sakuraEnabled = false;
@@ -1019,12 +1047,14 @@ static void RenderFrame(IDXGISwapChain*sc){
         BuildESPData();BuildSpectatorList();ProcessHitEvents();UpdateBombInfo();UpdateSoundPings();
         RunNoFlash();RunNoSmoke();RunGlow();RunRadarHack();
         RunSkinChanger();
-        RunFOVChanger();
+        RunFOVChanger();RunThirdPerson();RunNoPunchVisual();
         if(g_menuOpen){
             ReleaseRuntimeInputs();
         }else{
             RunBHop();
-            RunAutostop();RunAimbot();RunRCS();RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
+            RunAutoScope();RunAutostop();RunAutoPeek();
+            RunAimbot();RunRCS();RunAntiAim();
+            RunStrafeHelper();RunTriggerBot();ReleaseTriggerAttack();RunDoubleTap();RunAimFireGate();
         }
     }else{
         ReleaseRuntimeInputs();
@@ -1060,7 +1090,7 @@ static void RenderFrame(IDXGISwapChain*sc){
     DrawKeybindsWindow();
     if(!g_safeMode){ DrawESP(); DrawOofArrows(); DrawBombTimer(sw);
         DrawSoundPings(io.DeltaTime);
-        DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); }
+        DrawSpectatorList(sw); DrawNoCrosshair(sw, sh); DrawFovCircle(sw, sh); DrawRageCrosshair(sw, sh); }
     DrawLogs(io.DeltaTime, sw, sh);
     DrawDamageFloaters(sw, sh);
     DrawWatermark(sw);

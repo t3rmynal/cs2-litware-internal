@@ -609,8 +609,18 @@ static void RunBHop(){
 
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn); if(!lp)return;
     bool onGround = (Rd<uint32_t>(lp+offsets::base_entity::m_fFlags) & 1) != 0;
+    Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
+    float speed=sqrtf(vel.x*vel.x+vel.y*vel.y);
+    if(onGround && speed<50.f){ Wr<int>(g_client+offsets::buttons::jump, 0); return; }
 
-    Wr<int>(g_client+offsets::buttons::jump, onGround ? 65537 : 0);
+    static bool s_lastJumped=false;
+    if(onGround){
+        Wr<int>(g_client+offsets::buttons::jump, s_lastJumped?0:65537);
+        s_lastJumped=!s_lastJumped;
+    }else{
+        Wr<int>(g_client+offsets::buttons::jump, 0);
+        s_lastJumped=false;
+    }
 }
 
 
@@ -681,15 +691,34 @@ static void RunStrafeHelper(){
     if(delta > 180.f) delta -= 360.f; else if(delta < -180.f) delta += 360.f;
     s_lastYaw = curYaw;
 
-    if(fabsf(delta) < 0.1f){ ClearStrafeInput(); return; }
+    Vec3 vel=Rd<Vec3>(lp+offsets::base_entity::m_vecVelocity);
+    float speed=sqrtf(vel.x*vel.x+vel.y*vel.y);
+    if(speed<50.f){ ClearStrafeInput(); return; }
 
-    if(delta > 0.f){
-        Wr<int>(g_client+offsets::buttons::left,  65537);
-        Wr<int>(g_client+offsets::buttons::right, 0);
-    } else {
-        Wr<int>(g_client+offsets::buttons::right, 65537);
-        Wr<int>(g_client+offsets::buttons::left,  0);
+    if(fabsf(delta) > 0.1f){
+        if(delta > 0.f){
+            Wr<int>(g_client+offsets::buttons::left,  65537);
+            Wr<int>(g_client+offsets::buttons::right, 0);
+        } else {
+            Wr<int>(g_client+offsets::buttons::right, 65537);
+            Wr<int>(g_client+offsets::buttons::left,  0);
+        }
+    }else{
+        // auto w-strafe при отсутствии поворота мыши
+        static bool s_strafeDir = false;
+        float idealDeg = atan2f(30.f, speed) * (180.f/3.14159265f);
+        if(s_strafeDir){
+            Wr<int>(g_client+offsets::buttons::left,  65537);
+            Wr<int>(g_client+offsets::buttons::right, 0);
+            Wr<float>(vaAddr+4, curYaw + idealDeg);
+        }else{
+            Wr<int>(g_client+offsets::buttons::right, 65537);
+            Wr<int>(g_client+offsets::buttons::left,  0);
+            Wr<float>(vaAddr+4, curYaw - idealDeg);
+        }
+        s_strafeDir = !s_strafeDir;
     }
+    Wr<int>(g_client+offsets::buttons::forward, 65537);
     g_strafeOwned = true;
 }
 
@@ -774,6 +803,9 @@ static void RunAimbot(){
         if(g_aimbotTeamChk&&e.team==g_esp_local_team)continue;
         if(e.distance>g_espMaxDist)continue;
         if(g_aimbotVisCheck && !e.visible)continue;
+        if(g_minDamage>0 && e.health<g_minDamage)continue;
+        int useBone=g_aimbotBone;
+        if(g_forceBodyEnabled && e.health<=g_forceBodyHp) useBone=2;
         Vec3 aimPoint{};
         if(!ResolveAimbotPoint(e.pawn, {e.head_ox, e.head_oy, e.head_oz}, aimPoint))continue;
         evalPoint(aimPoint);
@@ -810,6 +842,9 @@ static void RunAimbot(){
     if(!found)return;
     g_aimbotLastFound = true;
     g_aimbotLastBestFov = bestDist;
+    float hc = (g_aimbotFov > 0.01f) ? Clampf(100.f - (bestDist / g_aimbotFov) * 100.f, 0.f, 100.f) : 100.f;
+    g_aimbotLastHitchance = hc;
+    if(g_hitchance > 0.f && hc < g_hitchance) return;
     Vec2 targetAngle=CalcAngle(eyePos,bestPoint);
     float smooth=Clampf(g_aimbotSmooth,1.f,50.f);
     float dp=AngleDiff(targetAngle.x,curPitch);
@@ -819,13 +854,30 @@ static void RunAimbot(){
     newPitch=Clampf(newPitch,-89.f,89.f);
     if(newYaw>180.f)newYaw-=360.f;else if(newYaw<-180.f)newYaw+=360.f;
     Wr<float>(vaAddr,newPitch);Wr<float>(vaAddr+4,newYaw);
-
+    if(g_autoFireEnabled && bestDist<=(g_waitAimThenFire?g_waitAimFovDeg:g_aimbotFov*0.5f)){
+        Wr<int>(g_client+offsets::buttons::attack,65537);
+    }
 }
 
 
 static void RunDoubleTap(){
-    if(!g_dtEnabled||!g_client||g_menuOpen){ ClearDtInput(); return; }
-    if(g_dtKey==0||!(GetAsyncKeyState(g_dtKey)&0x8000)){ ClearDtInput(); return; }
+    if(!g_dtEnabled||!g_client||g_menuOpen){ ClearDtInput(); g_dtBursting=false; return; }
+    if(g_dtKey==0||!(GetAsyncKeyState(g_dtKey)&0x8000)){ ClearDtInput(); g_dtBursting=false; return; }
+    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);
+    if(!lp){ ClearDtInput(); return; }
+    int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
+    if(!g_dtBursting){
+        g_dtShotsStart=shots;
+        g_dtBursting=true;
+        g_dtBurstEnd=GetTickCount64()+200;
+    }
+    int fired=shots-g_dtShotsStart;
+    if(fired>=g_dtBurstCount || GetTickCount64()>g_dtBurstEnd){
+        Wr<int>(g_client+offsets::buttons::attack,0);
+        g_dtBursting=false;
+        g_dtOwned=false;
+        return;
+    }
     Wr<int>(g_client+offsets::buttons::attack,65537);
     g_dtOwned = true;
 }
@@ -840,6 +892,121 @@ static void RunAimFireGate(){
     if(g_rcsEnabled && shots >= 1) return;
     if(g_aimbotLastFound && g_aimbotLastBestFov <= g_waitAimFovDeg) return;
     Wr<int>(g_client + offsets::buttons::attack, 0);
+}
+
+// --- rage ---
+
+static void RunAntiAim(){
+    if(!g_antiAimEnabled||!g_client||g_menuOpen)return;
+    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
+    int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
+    if(shots>0)return;
+    if(g_aimbotLastFound && g_aimbotEnabled && (GetAsyncKeyState(g_aimbotKey)&0x8000))return;
+    uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr)return;
+    float yaw=Rd<float>(vaAddr+4);
+    static float s_spinYaw=0.f;
+    switch(g_antiAimType){
+        case 0: s_spinYaw+=g_antiAimSpeed*(1.f/64.f); if(s_spinYaw>180.f)s_spinYaw-=360.f; yaw=s_spinYaw; break;
+        case 1: yaw+=Randf(-180.f,180.f); break;
+        case 2: yaw+=180.f; break;
+    }
+    if(yaw>180.f)yaw-=360.f; else if(yaw<-180.f)yaw+=360.f;
+    Wr<float>(vaAddr,-89.f);
+    Wr<float>(vaAddr+4,yaw);
+}
+
+static bool IsSniper(int wId){ return wId==9||wId==11||wId==38||wId==40; }
+
+static void RunAutoScope(){
+    if(!g_autoScopeEnabled||!g_aimbotEnabled||!g_client||g_menuOpen)return;
+    if(!(GetAsyncKeyState(g_aimbotKey)&0x8000))return;
+    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
+    if(Rd<bool>(lp+offsets::cs_pawn::m_bIsScoped))return;
+    uintptr_t el=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);if(!el)return;
+    int wId=GetWeaponId(GetActiveWeapon(lp,el));
+    if(!IsSniper(wId))return;
+    Wr<int>(g_client+offsets::buttons::attack2,65537);
+}
+
+static void ClearPeekInput(){
+    if(!g_peekOwned)return;
+    if(g_client){
+        Wr<int>(g_client+offsets::buttons::forward,0);
+        Wr<int>(g_client+offsets::buttons::back,0);
+        Wr<int>(g_client+offsets::buttons::left,0);
+        Wr<int>(g_client+offsets::buttons::right,0);
+    }
+    g_peekOwned=false;
+}
+
+static void RunAutoPeek(){
+    if(!g_autoPeekEnabled||!g_client||g_menuOpen||g_autoPeekKey==0){
+        if(g_peekState!=0){g_peekState=0;ClearPeekInput();}
+        return;
+    }
+    bool keyHeld=(GetAsyncKeyState(g_autoPeekKey)&0x8000)!=0;
+    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp){g_peekState=0;ClearPeekInput();return;}
+    uintptr_t scn=Rd<uintptr_t>(lp+offsets::base_entity::m_pGameSceneNode);
+    Vec3 curPos{};
+    if(scn) curPos=Rd<Vec3>(scn+offsets::scene_node::m_vecAbsOrigin);
+
+    if(g_peekState==0 && keyHeld){
+        g_peekSavedPos=curPos;
+        g_peekState=1;
+        return;
+    }
+    if(g_peekState==1){
+        int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
+        if(!keyHeld || shots>0) g_peekState=2;
+        else { ClearPeekInput(); return; }
+    }
+    if(g_peekState==2){
+        float dx=g_peekSavedPos.x-curPos.x;
+        float dy=g_peekSavedPos.y-curPos.y;
+        float dist=sqrtf(dx*dx+dy*dy);
+        if(dist<20.f){ g_peekState=0; ClearPeekInput(); return; }
+        uintptr_t vaAddr=ViewAnglesAddr();if(!vaAddr){g_peekState=0;ClearPeekInput();return;}
+        float yawDeg=Rd<float>(vaAddr+4);
+        float yaw=yawDeg*(3.14159265f/180.f);
+        float cosY=cosf(yaw),sinY=sinf(yaw);
+        float fwd= dx*cosY+dy*sinY;
+        float side=-dx*sinY+dy*cosY;
+        const float dz=5.f;
+        Wr<int>(g_client+offsets::buttons::forward, fwd>dz?65537:0);
+        Wr<int>(g_client+offsets::buttons::back,    fwd<-dz?65537:0);
+        Wr<int>(g_client+offsets::buttons::left,    side<-dz?65537:0);
+        Wr<int>(g_client+offsets::buttons::right,   side>dz?65537:0);
+        g_peekOwned=true;
+    }
+}
+
+static void RunThirdPerson(){
+    if(!g_client)return;
+    if(g_thirdPersonKey!=0 && (GetAsyncKeyState(g_thirdPersonKey)&1))
+        g_thirdPersonActive=!g_thirdPersonActive;
+    bool want=g_thirdPersonEnabled&&g_thirdPersonActive&&!g_menuOpen;
+    uintptr_t csgoInput=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
+    if(!csgoInput)return;
+    Wr<bool>(csgoInput+offsets::csgo_input::m_in_thirdperson, want);
+}
+
+static void RunNoPunchVisual(){
+    if(!g_noPunchVisual||!g_client)return;
+    uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
+    Vec3 zero{};
+    Wr<Vec3>(lp+offsets::cs_pawn::m_aimPunchAngle, zero);
+}
+
+static void DrawRageCrosshair(float sw, float sh){
+    if(!g_rageCrosshairEnabled)return;
+    float cx=sw*0.5f, cy=sh*0.5f;
+    ImU32 col=IM_COL32((int)(g_rageCrosshairCol[0]*255),(int)(g_rageCrosshairCol[1]*255),(int)(g_rageCrosshairCol[2]*255),(int)(g_rageCrosshairCol[3]*255));
+    auto*dl=ImGui::GetBackgroundDrawList();
+    float gap=3.f,len=8.f,thick=1.5f;
+    dl->AddLine({cx-gap-len,cy},{cx-gap,cy},col,thick);
+    dl->AddLine({cx+gap,cy},{cx+gap+len,cy},col,thick);
+    dl->AddLine({cx,cy-gap-len},{cx,cy-gap},col,thick);
+    dl->AddLine({cx,cy+gap},{cx,cy+gap+len},col,thick);
 }
 
 struct Particle{
