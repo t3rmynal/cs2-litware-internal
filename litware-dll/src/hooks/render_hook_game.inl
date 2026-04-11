@@ -792,7 +792,8 @@ static void RunAimbot(){
     if(sc0)localOrigin=Rd<Vec3>(sc0+offsets::scene_node::m_vecAbsOrigin);
     Vec3 eyePos=localOrigin+Rd<Vec3>(lp+offsets::base_pawn::m_vecViewOffset);
     float curPitch=Rd<float>(vaAddr);float curYaw=Rd<float>(vaAddr+4);
-    float bestDist=g_aimbotFov;Vec3 bestPoint{};bool found=false;
+    float searchFov = g_autoFireEnabled ? 180.f : g_aimbotFov;
+    float bestDist=searchFov;Vec3 bestPoint{};bool found=false;
     auto evalPoint = [&](const Vec3& p){
         Vec2 aimAngle=CalcAngle(eyePos,p);
         float dPitch=fabsf(AngleDiff(aimAngle.x,curPitch));
@@ -804,8 +805,8 @@ static void RunAimbot(){
         const ESPEntry&e=g_esp_players[i];
         if(!e.valid||!e.pawn||!IsLikelyPtr(e.pawn))continue;
         if(g_aimbotTeamChk&&e.team==g_esp_local_team)continue;
-        if(e.distance>g_espMaxDist)continue;
-        if(g_aimbotVisCheck && !e.visible)continue;
+        if(!g_autoFireEnabled && e.distance>g_espMaxDist)continue;
+        if(g_aimbotVisCheck && !g_autoFireEnabled && !e.visible)continue;
         if(g_minDamage>0 && e.health<g_minDamage)continue;
         int useBone=g_aimbotBone;
         if(g_forceBodyEnabled && e.health<=g_forceBodyHp) useBone=2;
@@ -964,7 +965,10 @@ static void RunAntiAim(){
         }
     }
     if(yaw>180.f)yaw-=360.f; else if(yaw<-180.f)yaw+=360.f;
-    Wr<float>(vaAddr, g_antiAimPitch);
+    // micro jitter pitch для усложнения headshot
+    float pitch = g_antiAimPitch + RandfRage(-3.f, 3.f);
+    pitch = Clampf(pitch, -89.f, 89.f);
+    Wr<float>(vaAddr, pitch);
     Wr<float>(vaAddr+4, yaw);
 }
 
@@ -1036,10 +1040,12 @@ static void RunAutoPeek(){
 static void RunThirdPerson(){
     if(!g_client)return;
     bool want=g_thirdPersonEnabled&&!g_menuOpen;
-    uintptr_t csgoInputPtr=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
-    if(!csgoInputPtr)return;
     __try{
-        Wr<bool>(csgoInputPtr+offsets::csgo_input::m_in_thirdperson, want);
+        // dwCSGOInput указывает на указатель на CSGOInput
+        uintptr_t csgoInputPtr=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
+        if(csgoInputPtr && IsLikelyPtr(csgoInputPtr)){
+            Wr<bool>(csgoInputPtr+offsets::csgo_input::m_in_thirdperson, want);
+        }
     }__except(EXCEPTION_EXECUTE_HANDLER){}
 }
 
