@@ -879,13 +879,8 @@ static void DrawMenu(){
     float menuScale = MenuScale();
     float animEased = sqrtf(1.f - powf(g_menuAnim - 1.f, 2.f));
     float animScale = LerpF(0.92f, 1.f, animEased);
-    float dpiScale = 1.0f;
-    if(g_gameHwnd){
-        HDC hdc = GetDC(g_gameHwnd);
-        if(hdc){ dpiScale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f; ReleaseDC(g_gameHwnd, hdc); }
-    }
-    float menuW = 820.f * dpiScale * menuScale * animScale;
-    float menuH = 540.f * dpiScale * menuScale * animScale;
+    float menuW = 820.f * menuScale * animScale;
+    float menuH = 540.f * menuScale * animScale;
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
     if(sw < 100.f || sh < 100.f){
         if(g_bbWidth >= 100){ sw = (float)g_bbWidth; } else if(sw < 100.f) sw = 1920.f;
@@ -1087,6 +1082,7 @@ static void DrawMenu(){
         float aaH = grpH(g_antiAimEnabled ? 4 : 2);
         float tbH = grpH(3);
         float rcsH = contentH - aaH - tbH - gap*2;
+        if(rcsH < 40.f * s) rcsH = 40.f * s;
         if(rcsH < 40.f * s) rcsH = 40.f * s;
         ImGui::SetCursorPos({rightX, contentY});
         BeginPidoGroup("##g_aa", "Anti-Aim", {childW, aaH});
