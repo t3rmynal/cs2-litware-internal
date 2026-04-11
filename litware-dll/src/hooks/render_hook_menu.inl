@@ -992,11 +992,11 @@ static void DrawMenu(){
         dl->AddText(fReg, 9.f*s, {rx, midH - szTime2.y*0.5f}, dimFaded, timeBuf);
     }
     {
-        const char* tabLabels2[] = {"Aimbot","Visuals","World","Misc"};
+        const char* tabLabels2[] = {"Aimbot","Visuals","World","Misc","Rage"};
         ImFont* fTabReg = font::regular ? font::regular : ImGui::GetFont();
         float tabBarTop = pos.y + size.y - tabBarH;
-        float eachW = size.x / 4.f;
-        for(int i=0;i<4;i++){
+        float eachW = size.x / 5.f;
+        for(int i=0;i<5;i++){
             float tx = pos.x + i*eachW;
             ImGui::SetCursorScreenPos({tx, tabBarTop});
             ImGui::InvisibleButton(tabLabels2[i], ImVec2(eachW, tabBarH));
@@ -1024,7 +1024,7 @@ static void DrawMenu(){
     }
 
     static bool s_configTabWasVisible = false;
-    const bool configTabVisible = g_activeTab == 3;
+    const bool configTabVisible = g_activeTab == 3 || g_activeTab == 4;
     if(configTabVisible && !s_configTabWasVisible) RefreshConfigList();
     s_configTabWasVisible = configTabVisible;
 
@@ -1065,43 +1065,20 @@ static void DrawMenu(){
             if(g_waitAimThenFire) PidoSliderFloat("Aim lock (deg)","", &g_waitAimFovDeg, 0.5f, 8.f, "%.2f");
             PidoToggle("Visible only","", &g_aimbotVisCheck);
             PidoTooltip("only aim at spotted players");
-            PidoSection("Rage");
-            PidoToggle("Auto-fire","", &g_autoFireEnabled);
-            PidoTooltip("auto shoot when aimed at target");
-            PidoToggle("Auto-scope","", &g_autoScopeEnabled);
-            PidoTooltip("auto zoom awp/scout before firing");
-            PidoToggle("Force body","", &g_forceBodyEnabled);
-            if(g_forceBodyEnabled) PidoSliderInt("Body HP threshold","", &g_forceBodyHp, 1, 100);
-            PidoSliderInt("Min damage","", &g_minDamage, 0, 100);
-            PidoTooltip("skip targets with HP below this");
-            PidoSliderFloat("Hitchance","", &g_hitchance, 0.f, 100.f, "%.0f%%");
-            PidoTooltip("minimum aim confidence to fire");
         }
         EndPidoGroup();
 
-        float aaH = grpH(g_antiAimEnabled ? 4 : 2);
         float tbH = grpH(3);
-        float rcsH = contentH - aaH - tbH - gap*2;
-        if(rcsH < 40.f * s) rcsH = 40.f * s;
+        float rcsH = contentH - tbH - gap;
         if(rcsH < 40.f * s) rcsH = 40.f * s;
         ImGui::SetCursorPos({rightX, contentY});
-        BeginPidoGroup("##g_aa", "Anti-Aim", {childW, aaH});
-        PidoToggle("Enable##aa","", &g_antiAimEnabled);
-        if(g_antiAimEnabled){
-            const char* aaTypes[]={"Spin","Jitter","Static"};
-            PidoCombo("Type","", &g_antiAimType, aaTypes, IM_ARRAYSIZE(aaTypes));
-            PidoSliderFloat("Speed","", &g_antiAimSpeed, 100.f, 1800.f, "%.0f");
-        }
-        EndPidoGroup();
-
-        ImGui::SetCursorPos({rightX, contentY + aaH + gap});
         BeginPidoGroup("##g_tb", "Triggerbot", {childW, tbH});
         PidoToggle("Enable##tb","", &g_tbEnabled);
         PidoSliderInt("Delay (ms)","", &g_tbDelay, 0, 300);
         PidoKeybind("Trigger key","", &g_tbKey);
         EndPidoGroup();
 
-        ImGui::SetCursorPos({rightX, contentY + aaH + tbH + gap*2});
+        ImGui::SetCursorPos({rightX, contentY + tbH + gap});
         BeginPidoGroup("##g_rcs", "Recoil Control", {childW, rcsH});
         PidoToggle("Enable##rcs","", &g_rcsEnabled);
         PidoSliderFloat("X axis","", &g_rcsX, 0.f, 2.f, "%.2f");
@@ -1222,7 +1199,7 @@ static void DrawMenu(){
         }
         EndPidoGroup();
     }else if(g_activeTab==3){
-        int movRows = 3 + (g_strafeEnabled ? 1 : 0) + (g_dtEnabled ? 2 : 0) + 1 + (g_autoPeekEnabled ? 1 : 0);
+        int movRows = 2 + (g_strafeEnabled ? 1 : 0);
         float movH   = grpH(movRows);
         float radH   = grpH(1);
         float hudH   = contentH - movH - radH - gap * 2.f;
@@ -1233,13 +1210,6 @@ static void DrawMenu(){
         PidoToggle("Bunny hop","", &g_bhopEnabled);
         PidoToggle("Auto strafe","", &g_strafeEnabled);
         if(g_strafeEnabled) PidoKeybind("Strafe key","", &g_strafeKey);
-        PidoToggle("Double tap","", &g_dtEnabled);
-        if(g_dtEnabled){
-            PidoKeybind("DT key","", &g_dtKey);
-            PidoSliderInt("Burst count","", &g_dtBurstCount, 2, 5);
-        }
-        PidoToggle("Auto-peek","", &g_autoPeekEnabled);
-        if(g_autoPeekEnabled) PidoKeybind("Peek key","", &g_autoPeekKey);
         EndPidoGroup();
 
         ImGui::SetCursorPos({contentX, contentY + movH + gap});
@@ -1256,8 +1226,7 @@ static void DrawMenu(){
         PidoToggle("Keybinds","", &g_keybindsEnabled);
         EndPidoGroup();
 
-        int viewRows = 2 + (g_thirdPersonEnabled?1:0) + 1 + (g_rageCrosshairEnabled?1:0) + 1;
-        float viewH   = grpH(viewRows);
+        float viewH   = grpH(2);
         float configH = contentH - viewH - gap;
         if (configH < 40.f * s) configH = 40.f * s;
 
@@ -1265,12 +1234,6 @@ static void DrawMenu(){
         BeginPidoGroup("##g_view", "View", {childW, viewH});
         PidoToggle("FOV changer","", &g_fovEnabled);
         PidoSliderFloat("FOV","", &g_fovValue, 70.f, 130.f, "%.0f");
-        PidoToggle("Third person","", &g_thirdPersonEnabled);
-        if(g_thirdPersonEnabled) PidoKeybind("TP key","", &g_thirdPersonKey);
-        PidoToggle("No visual recoil","", &g_noPunchVisual);
-        PidoTooltip("removes screen shake from recoil");
-        PidoToggle("Rage crosshair","", &g_rageCrosshairEnabled);
-        if(g_rageCrosshairEnabled) PidoColorEdit4("Crosshair color","", g_rageCrosshairCol);
         EndPidoGroup();
 
         ImGui::SetCursorPos({rightX, contentY + viewH + gap});
@@ -1298,6 +1261,57 @@ static void DrawMenu(){
         if(PidoButton("Refresh", ImVec2(btnW, 0))) RefreshConfigList();
         ImGui::SameLine(0, 4.f*s);
         if(PidoButton("Reset",   ImVec2(btnW, 0))) ApplyDefaults();
+        EndPidoGroup();
+    }else if(g_activeTab==4){
+        ImGui::SetCursorPos({contentX, contentY});
+        BeginPidoGroup("##g_rage", "Rage Aimbot", {childW, contentH});
+        PidoToggle("Auto-fire","", &g_autoFireEnabled);
+        PidoTooltip("auto shoot when aimed at target");
+        PidoToggle("Auto-scope","", &g_autoScopeEnabled);
+        PidoTooltip("auto zoom awp/scout before firing");
+        PidoToggle("Force body","", &g_forceBodyEnabled);
+        if(g_forceBodyEnabled) PidoSliderInt("Body HP threshold","", &g_forceBodyHp, 1, 100);
+        PidoSliderInt("Min damage","", &g_minDamage, 0, 100);
+        PidoTooltip("skip targets with HP below this");
+        PidoSliderFloat("Hitchance","", &g_hitchance, 0.f, 100.f, "%.0f%%");
+        PidoTooltip("minimum aim confidence to fire");
+        PidoSection("Visuals");
+        PidoToggle("Third person","", &g_thirdPersonEnabled);
+        if(g_thirdPersonEnabled) PidoKeybind("TP key","", &g_thirdPersonKey);
+        PidoToggle("No visual recoil","", &g_noPunchVisual);
+        PidoTooltip("removes screen shake from recoil");
+        PidoToggle("Rage crosshair","", &g_rageCrosshairEnabled);
+        if(g_rageCrosshairEnabled) PidoColorEdit4("Crosshair color","", g_rageCrosshairCol);
+        EndPidoGroup();
+
+        float aaH = grpH(g_antiAimEnabled ? 4 : 2);
+        float peekH = grpH(g_autoPeekEnabled ? 3 : 2);
+        float dtH = contentH - aaH - peekH - gap*2;
+        if(dtH < 40.f * s) dtH = 40.f * s;
+
+        ImGui::SetCursorPos({rightX, contentY});
+        BeginPidoGroup("##g_aa", "Anti-Aim", {childW, aaH});
+        PidoToggle("Enable##aa","", &g_antiAimEnabled);
+        if(g_antiAimEnabled){
+            const char* aaTypes[]={"Spin","Jitter","Static"};
+            PidoCombo("Type","", &g_antiAimType, aaTypes, IM_ARRAYSIZE(aaTypes));
+            PidoSliderFloat("Speed","", &g_antiAimSpeed, 100.f, 1800.f, "%.0f");
+        }
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({rightX, contentY + aaH + gap});
+        BeginPidoGroup("##g_peek", "Auto-Peek", {childW, peekH});
+        PidoToggle("Enable##peek","", &g_autoPeekEnabled);
+        if(g_autoPeekEnabled) PidoKeybind("Peek key","", &g_autoPeekKey);
+        EndPidoGroup();
+
+        ImGui::SetCursorPos({rightX, contentY + aaH + peekH + gap*2});
+        BeginPidoGroup("##g_dt2", "Double Tap", {childW, dtH});
+        PidoToggle("Enable##dt2","", &g_dtEnabled);
+        if(g_dtEnabled){
+            PidoKeybind("DT key","", &g_dtKey);
+            PidoSliderInt("Burst count","", &g_dtBurstCount, 2, 5);
+        }
         EndPidoGroup();
     }
 
