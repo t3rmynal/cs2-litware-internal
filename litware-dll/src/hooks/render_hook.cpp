@@ -9,6 +9,7 @@
 #include "../core/entity.h"
 #include "../core/world_to_screen.h"
 #include "../core/esp_data.h"
+#include "../memory/pattern_scan.h"
 #include "../debug.h"
 #include <MinHook.h>
 #include <d3d11.h>
@@ -471,7 +472,6 @@ static void PushLog(const char* text, ImU32 color, int type);
 static void PlayHitSound(int type);
 static void EnsureSceneHooks();
 static void EnsureClientHooks();
-static void* PatternScan(HMODULE mod,const char*pat,const char*mask);
 static void EnsureCalcWorldSpaceBones();
 static void UpdatePawnBones(uintptr_t pawn);
 static void EnsureModules();
@@ -1114,15 +1114,6 @@ static bool GetPresentVtable(void*&out){
     DestroyWindow(hw);UnregisterClassA("LW_D11_DUMMY",wc.hInstance);return ok;
 }
 
-static void*PatternScan(HMODULE mod,const char*pat,const char*mask){
-    if(!mod||!pat||!mask)return nullptr;
-    MODULEINFO mi{};if(!GetModuleInformation(GetCurrentProcess(),mod,&mi,sizeof(mi)))return nullptr;
-    auto b=(const uint8_t*)mi.lpBaseOfDll;size_t sz=mi.SizeOfImage,pl=strlen(mask);
-    for(size_t i=0;i+pl<=sz;++i){bool ok=true;
-        for(size_t j=0;j<pl&&ok;++j)if(mask[j]!='?'&&b[i+j]!=(uint8_t)pat[j])ok=false;
-        if(ok)return(void*)(b+i);
-    }return nullptr;
-}
 
 static void* ResolveRelative(void* instr, int offset, int size){
     if(!instr) return nullptr;
