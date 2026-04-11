@@ -1042,10 +1042,13 @@ static void RenderFrame(IDXGISwapChain*sc){
             }
         }if(!g_rtv)return;
     }
-    if(GetAsyncKeyState(VK_INSERT)&1){
+    {static bool s_insWasDown=false;
+    bool insDown=(GetAsyncKeyState(VK_INSERT)&0x8000)!=0;
+    if(insDown&&!s_insWasDown){
         g_menuOpen=!g_menuOpen;
         if(!g_menuOpen) g_menuAnglesLocked = false;
     }
+    s_insWasDown=insDown;}
     if(GetAsyncKeyState(VK_END)&1){ReleaseRuntimeInputs();RequestUnload();return;}
     UpdateMenuCameraLock();
     if(!g_safeMode){ __try{
