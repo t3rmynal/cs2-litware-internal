@@ -1,5 +1,15 @@
 // меню
 
+static void PidoTooltip(const char* text){
+    if(!text||!text[0]) return;
+    if(!ImGui::IsItemHovered()) return;
+    if(ImGui::GetIO().MouseStationaryTimer < 0.4f) return;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6,4));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.f);
+    ImGui::SetTooltip("%s", text);
+    ImGui::PopStyleVar(2);
+}
+
 static bool IsInputMessage(UINT msg){
     if(msg>=WM_MOUSEFIRST && msg<=WM_MOUSELAST) return true;
     if(msg>=WM_KEYFIRST && msg<=WM_KEYLAST) return true;
@@ -864,8 +874,13 @@ static void DrawMenu(){
     float menuScale = MenuScale();
     float animEased = sqrtf(1.f - powf(g_menuAnim - 1.f, 2.f));
     float animScale = LerpF(0.92f, 1.f, animEased);
-    float menuW = 820.f * menuScale * animScale;
-    float menuH = 540.f * menuScale * animScale;
+    float dpiScale = 1.0f;
+    if(g_gameHwnd){
+        HDC hdc = GetDC(g_gameHwnd);
+        if(hdc){ dpiScale = GetDeviceCaps(hdc, LOGPIXELSX) / 96.0f; ReleaseDC(g_gameHwnd, hdc); }
+    }
+    float menuW = 820.f * dpiScale * menuScale * animScale;
+    float menuH = 540.f * dpiScale * menuScale * animScale;
     float sw=(float)g_esp_screen_w, sh=(float)g_esp_screen_h;
     if(sw < 100.f || sh < 100.f){
         if(g_bbWidth >= 100){ sw = (float)g_bbWidth; } else if(sw < 100.f) sw = 1920.f;
@@ -1040,10 +1055,16 @@ static void DrawMenu(){
             PidoKeybind("Aimbot key","", &g_aimbotKey);
             PidoToggle("FOV circle","", &g_fovCircleEnabled);
             if(g_fovCircleEnabled) PidoColorEdit4("FOV color","", g_fovCircleCol);
+            const char* wfItems[]={"All","Rifles","Snipers","Pistols"};
+            PidoCombo("Weapon filter","", &g_aimbotWeaponFilter, wfItems, IM_ARRAYSIZE(wfItems));
+            PidoTooltip("aimbot will only work with selected weapon class");
             PidoToggle("Autostop","", &g_autostopEnabled);
+            PidoTooltip("stop movement before shooting for accuracy");
             PidoToggle("Wait aim then fire","", &g_waitAimThenFire);
+            PidoTooltip("block attack until crosshair is near target");
             if(g_waitAimThenFire) PidoSliderFloat("Aim lock (deg)","", &g_waitAimFovDeg, 0.5f, 8.f, "%.2f");
             PidoToggle("Visible only","", &g_aimbotVisCheck);
+            PidoTooltip("only aim at spotted players");
         }
         EndPidoGroup();
 
@@ -1062,6 +1083,7 @@ static void DrawMenu(){
         PidoSliderFloat("X axis","", &g_rcsX, 0.f, 2.f, "%.2f");
         PidoSliderFloat("Y axis","", &g_rcsY, 0.f, 2.f, "%.2f");
         PidoSliderFloat("Smooth","", &g_rcsSmooth, 1.f, 20.f, "%.1f");
+        PidoTooltip("higher = slower recoil compensation");
         EndPidoGroup();
     }else if(g_activeTab==1){
         ImGui::SetCursorPos({contentX, contentY});
@@ -1166,6 +1188,7 @@ static void DrawMenu(){
         if(g_sakuraEnabled) PidoColorEdit4("Sakura","", g_sakuraCol);
         PidoToggle("Stars","", &g_starsEnabled);
         PidoToggle("3D world","", &g_particlesWorld);
+        PidoTooltip("particles spawn in world space around player");
         if(g_particlesWorld){
             PidoSliderFloat("World radius","", &g_particlesWorldRadius, 200.f, 2000.f, "%.0f");
             PidoSliderFloat("World height","", &g_particlesWorldHeight, 100.f, 1200.f, "%.0f");
