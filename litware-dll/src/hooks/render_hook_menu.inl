@@ -1278,7 +1278,6 @@ static void DrawMenu(){
         PidoTooltip("minimum aim confidence to fire");
         PidoSection("Visuals");
         PidoToggle("Third person","", &g_thirdPersonEnabled);
-        if(g_thirdPersonEnabled) PidoKeybind("TP key","", &g_thirdPersonKey);
         PidoToggle("No visual recoil","", &g_noPunchVisual);
         PidoTooltip("removes screen shake from recoil");
         PidoToggle("Rage crosshair","", &g_rageCrosshairEnabled);
@@ -1358,7 +1357,7 @@ static void DrawKeybindsWindow(){
     addRow(g_dtEnabled, "Double tap", g_dtKey, dtActive, g_dtKey == 0);
     addRow(g_strafeEnabled, "Auto strafe", g_strafeKey, strafeActive, g_strafeKey == 0);
     addRow(g_autoPeekEnabled, "Auto-peek", g_autoPeekKey, peekActive, g_autoPeekKey == 0);
-    addRow(g_thirdPersonEnabled && g_thirdPersonActive, "Third person", g_thirdPersonKey, true, g_thirdPersonKey == 0);
+    addRow(g_thirdPersonEnabled, "Third person", 0, true, true);
 
     if(rowCount <= 0) return;
 

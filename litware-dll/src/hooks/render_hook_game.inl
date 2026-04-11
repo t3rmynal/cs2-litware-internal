@@ -842,7 +842,10 @@ static void RunAimbot(){
             }
         }
     }
-    if(!found)return;
+    if(!found){
+        if(g_autoFireEnabled) Wr<int>(g_client+offsets::buttons::attack,0);
+        return;
+    }
     g_aimbotLastFound = true;
     g_aimbotLastBestFov = bestDist;
     float hc = (g_aimbotFov > 0.01f) ? Clampf(100.f - (bestDist / g_aimbotFov) * 100.f, 0.f, 100.f) : 100.f;
@@ -857,22 +860,9 @@ static void RunAimbot(){
     newPitch=Clampf(newPitch,-89.f,89.f);
     if(newYaw>180.f)newYaw-=360.f;else if(newYaw<-180.f)newYaw+=360.f;
     Wr<float>(vaAddr,newPitch);Wr<float>(vaAddr+4,newYaw);
-    if(g_autoFireEnabled){
-        // проверяем что под прицелом враг через m_iIDEntIndex
-        int crossEnt=Rd<int>(lp+offsets::cs_pawn::m_iIDEntIndex);
-        if(crossEnt>0 && crossEnt<=8192){
-            uintptr_t entityList=Rd<uintptr_t>(g_client+offsets::client::dwEntityList);
-            if(entityList){
-                uintptr_t targPawn=ResolveEntityByIndex(entityList,crossEnt);
-                if(targPawn && IsLikelyPtr(targPawn)){
-                    int targTeam=(int)Rd<uint8_t>(targPawn+offsets::base_entity::m_iTeamNum);
-                    int targHp=Rd<int>(targPawn+offsets::base_entity::m_iHealth);
-                    if(targHp>0 && (!g_aimbotTeamChk || targTeam!=g_esp_local_team)){
-                        Wr<int>(g_client+offsets::buttons::attack,65537);
-                    }
-                }
-            }
-        }
+    if(g_autoFireEnabled && found){
+        // rage: стреляем сразу когда навелись
+        Wr<int>(g_client+offsets::buttons::attack,65537);
     }
 }
 
@@ -936,8 +926,8 @@ static void RunAntiAim(){
     uintptr_t lp=Rd<uintptr_t>(g_client+offsets::client::dwLocalPlayerPawn);if(!lp)return;
     int shots=Rd<int>(lp+offsets::cs_pawn::m_iShotsFired);
     if(shots>0)return;
-    if(g_autoFireEnabled && g_aimbotLastFound)return;
-    if(!g_autoFireEnabled && g_aimbotLastFound && g_aimbotEnabled && (GetAsyncKeyState(g_aimbotKey)&0x8000))return;
+    // не ломать углы когда aimbot стреляет
+    if(g_aimbotLastFound)return;
 
     // Z/C управление десинком
     if(GetAsyncKeyState('Z')&1) g_aaDesyncDir=(g_aaDesyncDir==1)?0:1;
@@ -1045,9 +1035,7 @@ static void RunAutoPeek(){
 
 static void RunThirdPerson(){
     if(!g_client)return;
-    if(g_thirdPersonKey!=0 && (GetAsyncKeyState(g_thirdPersonKey)&1))
-        g_thirdPersonActive=!g_thirdPersonActive;
-    bool want=g_thirdPersonEnabled&&g_thirdPersonActive&&!g_menuOpen;
+    bool want=g_thirdPersonEnabled&&!g_menuOpen;
     uintptr_t csgoInputPtr=Rd<uintptr_t>(g_client+offsets::client::dwCSGOInput);
     if(!csgoInputPtr)return;
     __try{
