@@ -11,12 +11,13 @@ Internal cheat for Counter-Strike 2. The DLL is injected into `cs2.exe`, hooks D
 
 ---
 
-## Build
+## Features
 
-1. `git clone --recurse-submodules`
-2. Open `litware-dll/litware-dll.vcxproj` in Visual Studio
-3. Build `Release | x64`
-4. Output: `litware-dll/bin/Release/litware-dll.dll`
+- ESP: boxes, health, names, weapons, ammo, money, distance, offscreen arrows
+- Aimbot: FOV, smoothing, head bone, team check, triggerbot
+- Visuals: no flash, no smoke, glow, sky color, snow, sakura
+- Movement: bunny hop, strafe helper, auto-stop
+- Misc: FOV changer, radar, bomb timer, spectator list
 
 ---
 
@@ -25,6 +26,15 @@ Internal cheat for Counter-Strike 2. The DLL is injected into `cs2.exe`, hooks D
 | 1 | 2 | 3 |
 |:--:|:--:|:--:|
 | <img src="screenshots/1.png" width="320"> | <img src="screenshots/2.png" width="320"> | <img src="screenshots/3.png" width="320"> |
+
+---
+
+## Build
+
+1. `git clone --recurse-submodules`
+2. Open `litware-dll/litware-dll.vcxproj` in Visual Studio
+3. Build `Release | x64`
+4. Output: `litware-dll/bin/Release/litware-dll.dll`
 
 ---
 
@@ -40,16 +50,6 @@ Internal cheat for Counter-Strike 2. The DLL is injected into `cs2.exe`, hooks D
 ## Configs
 
 Configs are stored in `%APPDATA%\litware\` as plain-text `*.cfg` files.
-
----
-
-## Features
-
-- ESP: boxes, health, names, weapons, ammo, money, distance, offscreen arrows
-- Aimbot: FOV, smoothing, head bone, team check
-- Visuals: no flash, no smoke, glow, sky color, snow, sakura
-- Movement: bunny hop, strafe helper
-- Misc: FOV changer, radar, bomb timer, spectator list
 
 ---
 
